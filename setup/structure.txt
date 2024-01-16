@@ -1,0 +1,28 @@
++attributes {
+    first_name: VARCHAR(100),
+    last_name: VARACHAR(100),
+    number: INTEGER,
+    street: VARCHAR(100),
+    house_number: VARCHAR(8),
+    zip: VARCHAR(5),
+    city: VARCHAR(100),
+    birthday: DATE,
+    entry_date: DATE
+}
+Address {
+    street,
+    house_number,
+    zip,
+    city
+}
+Person {
+    first_name,
+    last_name,
+    birthday,
+    ~person_to_address -> Address
+}
+Employee(Person) {
+    number!*,
+    entry_date,
+    ~manager_to_employees -> Employee
+}

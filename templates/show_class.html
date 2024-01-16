@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %} Class {{ class_.name }} {% endblock %}</h1>
+    <h2>General</h2>
+    <table>
+        <tr><td>ID</td><td>{{ class_.id }}</td></tr>
+        <tr><td>Name</td><td>{{ class_.name }}</td></tr>
+        <tr><td>Parent</td><td>{{ class_.get_parent().name }}</td></tr>
+    </table>
+    <h2>Attributes</h2>
+    <table>
+        {% for attribute in class_attributes %}
+            <tr><td style="font-weight: bold;"><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
+        {% endfor %}
+        {% for attribute in inherited_attributes %}
+            <tr><td>{{ attribute.name }}</td></tr>
+        {% endfor %}
+    </table>
+    <h2>Objects</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Class</th>
+                {% for att_name in attributes %}
+                    <th>{{ att_name }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for obj in objects %}
+            <tr>
+                <td>{{ obj.id }}</td>
+                <td>{{ obj.get_class().name }}</td>
+                {% for attribute_name in displayed_attribute_names %}
+                    <td>{{ obj.attributes[attribute_name] }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %} Attribute assignment {{ class_.name }}.{{ attribute.name }} {% endblock %}</h1>
+    <h2>General</h2>
+    <table>
+        <tr><td>Class</td><td>{{ class_.name }}</td></tr>
+        <tr><td>Attribute</td><td>{{ attribute.name }}</td></tr>
+    </table>
+{% endblock %}
