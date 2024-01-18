@@ -23,7 +23,7 @@ def find_corresponding_close(text, str_open: str, str_close: str, start: int = 0
     return first_close
 
 def correct_source_indentation(source: str) -> str:
-    lines = source.splitlines()
+    lines = [line for line in source.splitlines() if len(line) > 0]
     if len(lines) > 0:
         line_start = len(lines[0]) - len(lines[0].lstrip())
         return '\n'.join(line[line_start:].rstrip() for line in lines)

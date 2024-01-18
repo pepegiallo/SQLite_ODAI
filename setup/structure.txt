@@ -13,6 +13,15 @@
         value = parse_sqlite_date(value)
     }
 }
+#array {
+    BLOB,
+    get {
+        value = bytes_to_array(value)
+    },
+    set {
+        value = array_to_bytes(value)
+    }
+}
 +attributes {
     first_name: text100,
     last_name: text100,
@@ -22,7 +31,8 @@
     zip: text100,
     city: text100,
     birthday: date,
-    entry_date: date
+    entry_date: date,
+    some_numbers: array
 }
 Address {
     street,
@@ -40,4 +50,7 @@ Employee(Person) {
     number*,
     entry_date,
     ~manager_to_employees -> Employee
+}
+ArrayData {
+    some_numbers
 }

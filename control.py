@@ -171,6 +171,9 @@ class Object(ObjectInterfaceControl):
         self.created = created
         self.attributes = attributes
 
+    def __getitem__(self, key: str):
+        return self.get_value(key)
+
     def get_class(self) -> Class:
         """ Gibt die Klasse des Objekts zurück """
         return self.class_
@@ -192,11 +195,17 @@ class Object(ObjectInterfaceControl):
     
     def get_value(self, attribute_name: str):
         assignment = self.class_.get_attribute_assignment(attribute_name)
-        return assignment.transform_read_value(self.attributes[attribute_name], self)
+        if assignment:
+            return assignment.transform_read_value(self.attributes[attribute_name], self)
+        else:
+            raise KeyError(f'Invalid attribute {attribute_name}')
     
     def get_raw_value(self, attribute_name: str):
         assignment = self.class_.get_attribute_assignment(attribute_name)
-        return assignment.datatype_transform_read_value(self.attributes[attribute_name])
+        if assignment:
+            return assignment.datatype_transform_read_value(self.attributes[attribute_name])
+        else:
+            raise KeyError(f'Invalid attribute {attribute_name}')
         
 class ObjectList(ObjectInterfaceControl, list):
     def __init__(self, interface, objects: list):
