@@ -1,9 +1,29 @@
 from datetime import datetime
 from utils import remove_duplicates
 
-class Class:
-    def __init__(self, interface, id: int, name: str, parent_id: int) -> None:
+class ObjectInterfaceControl:
+    def __init__(self, interface) -> None:
         self.interface = interface
+
+class Datatype(ObjectInterfaceControl):
+    def __init__(self, interface, id: int, name: str, generator: str, read_transformer_source: str, write_transformer_source: str) -> None:
+        super().__init__(interface)
+        self.id = id
+        self.name = name
+        self.generator = generator
+        self.read_transformer_source = read_transformer_source
+        self.write_transformer_source = write_transformer_source
+        interface.structure_cache.store_datatype(self)
+
+    def transform_read_value(self, value):
+        return self.interface.execution_handler.transform_value(self.read_transformer_source, value)
+    
+    def transform_write_value(self, value):
+        return self.interface.execution_handler.transform_value(self.write_transformer_source, value)
+
+class Class(ObjectInterfaceControl):
+    def __init__(self, interface, id: int, name: str, parent_id: int) -> None:
+        super().__init__(interface)
         self.id = id
         self.name = name
         self.parent_id = parent_id
@@ -39,7 +59,6 @@ class Class:
             total_children.extend(child.get_total_children())
         return total_children
 
-
     def get_attribute_assignments(self):
         """ Gibt die Attributzuweisungen der Klasse zurück """
         if not self.attribute_assignments:
@@ -67,32 +86,37 @@ class Class:
             self.total_attribute_assignments = self.__get_total_attribute_assignments__()
         return self.total_attribute_assignments
 
-    def get_attribute_assignment(self, name: str):
+    def get_attribute_assignment(self, attribute_name: str):
         """ Gibt die Attributzuweisung aller bei der Klasse erlaubten Attribute anhand des gegeben Attributnamens zurück """
         for aa in self.get_total_attribute_assignments():
-            if aa.get_attribute().name == name:
+            if aa.get_attribute().name == attribute_name:
                 return aa
         return None
 
 
-class Attribute:
-    def __init__(self, interface, id: str, name: str, generator: str) -> None:
-        self.interface = interface
+class Attribute(ObjectInterfaceControl):
+    def __init__(self, interface, id: str, name: str, datatype_id: int) -> None:
+        super().__init__(interface)
         self.id = id
         self.name = name
-        self.generator = generator
+        self.datatype_id = datatype_id
         interface.structure_cache.store_attribute(self)
 
-class AttributeAssignment:
-    def __init__(self, interface, class_id: str, attribute_id: str, indexed: bool, nullable: bool, default: str, getter_transformer_source: str, setter_transformer_source: str):
-        self.interface = interface
+    def get_datatype(self) -> Datatype:
+        return self.interface.get_datatype(id=self.datatype_id)
+
+
+class AttributeAssignment(ObjectInterfaceControl):
+    def __init__(self, interface, class_id: str, attribute_id: str, indexed: bool, read_transformer_source: str, write_transformer_source: str):
+        super().__init__(interface)
         self.class_id = class_id
         self.attribute_id = attribute_id
         self.indexed = indexed
-        self.nullable = nullable
-        self.default = default
-        self.getter_transformer_source = getter_transformer_source
-        self.setter_transformer_source = setter_transformer_source
+        self.read_transformer_source = read_transformer_source
+        self.write_transformer_source = write_transformer_source
+        datatype = self.get_attribute().get_datatype()
+        self.datatype_transform_read_value = datatype.transform_read_value
+        self.datatype_transform_write_value = datatype.transform_write_value
 
     def get_class(self) -> Class:
         """ Gibt Klassenobjekt zurück """
@@ -102,9 +126,29 @@ class AttributeAssignment:
         """ Gibt Attributobjekt zurück """
         return self.interface.get_attribute(id=self.attribute_id)
 
-class Reference:
+    def __transform_value__(self, source: str, value, object_):
+        """ Wandelt den gegebenen Wert mit dem gegebenen Python-Code um. Das übergebene Objekt ist als this verwendbar. """
+        return self.interface.execution_handler.transform_value(source, value, this=object_)
+    
+    def transform_read_value(self, value, object_):
+
+        # Datatype transformer
+        value = self.datatype_transform_read_value(value)
+
+        # Assignment transformer
+        return self.__transform_value__(self.read_transformer_source, value, object_)
+
+    def transform_write_value(self, value, object_):
+
+        # Assignment transformer
+        value = self.__transform_value__(self.write_transformer_source, value, object_)
+
+        # Datatype transformer
+        return self.datatype_transform_write_value(value)
+
+class Reference(ObjectInterfaceControl):
     def __init__(self, interface, id: str, name: str, origin_class_id: str, target_class_id: str) -> None:
-        self.interface = interface
+        super().__init__(interface)
         self.id = id
         self.name = name
         self.origin_class_id = origin_class_id
@@ -119,9 +163,9 @@ class Reference:
         """ Gibt Klassenobjekt der Zielklasse zurück """
         return self.interface.get_class(id=self.target_class_id)
 
-class Object:
+class Object(ObjectInterfaceControl):
     def __init__(self, interface, id: str, class_: Class, created: datetime, **attributes):
-        self.interface = interface
+        super().__init__(interface)
         self.id = id
         self.class_ = class_
         self.created = created
@@ -146,16 +190,17 @@ class Object:
         str_attributes = '\n  '.join(f'{attribute} = {value}' for attribute, value in self.attributes.items())
         return f'{self.class_.name} {self.id}:\n  {str_attributes}'
     
-    def get_attribute_value(self, name: str):
-        assignment = self.class_.get_attribute_assignment(name)
-        value = self.attributes[name]
-        if assignment.getter_transformer_source:
-            value = self.interface.execution_handler.transform_value(assignment.getter_transformer_source, self, value)
-        return value
+    def get_value(self, attribute_name: str):
+        assignment = self.class_.get_attribute_assignment(attribute_name)
+        return assignment.transform_read_value(self.attributes[attribute_name], self)
+    
+    def get_raw_value(self, attribute_name: str):
+        assignment = self.class_.get_attribute_assignment(attribute_name)
+        return assignment.datatype_transform_read_value(self.attributes[attribute_name])
         
-class ObjectList(list):
+class ObjectList(ObjectInterfaceControl, list):
     def __init__(self, interface, objects: list):
-        self.interface = interface
+        super().__init__(interface)
         self.extend(objects)
 
     def hop(self, reference: Reference):

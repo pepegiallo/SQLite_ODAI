@@ -6,6 +6,16 @@ CREATE TABLE info (
     "time" DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Datentyp
+CREATE TABLE structure_datatype (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    generator TEXT NOT NULL,
+    read_transformer_source TEXT,
+    write_transformer_source TEXT
+);
+CREATE INDEX datatype_name ON structure_datatype(name);
+
 -- Klasse
 CREATE TABLE structure_class (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +28,7 @@ CREATE INDEX class_name ON structure_class(name);
 CREATE TABLE structure_attribute (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    generator TEXT NOT NULL
+    datatype_id INTEGER REFERENCES datatype(id)
 );
 CREATE INDEX attribute_name ON structure_attribute(name);
 
@@ -27,10 +37,8 @@ CREATE TABLE structure_attribute_assignment (
     class_id INTEGER REFERENCES structure_class(id),
     attribute_id INTEGER REFERENCES structure_attribute(id),
     indexed TINYINT NOT NULL,
-    nullable TINYINT NOT NULL,
-    "default" TEXT,
-    getter_transformer_source TEXT,
-    setter_transformer_source TEXT,
+    read_transformer_source TEXT,
+    write_transformer_source TEXT,
     PRIMARY KEY (class_id, attribute_id)
 );
 

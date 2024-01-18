@@ -1,6 +1,35 @@
 from interface import ObjectInterface
 import logging
 
+def find_corresponding_close(text, str_open: str, str_close: str, start: int = 0):
+    level = 1
+    while level > 0:
+        first_open = text.find(str_open, start)
+        first_close = text.find(str_close, start)
+
+        # Kein Schluss vorhanden
+        if first_close < 0:
+            return -1
+        
+        # Öffnen zuerst
+        elif first_open < first_close and first_open >= start:
+            level += 1
+            start = first_open + 1
+
+        # Schließen zuerst
+        else:
+            level -= 1
+            start = first_close + 1
+    return first_close
+
+def correct_source_indentation(source: str) -> str:
+    lines = source.splitlines()
+    if len(lines) > 0:
+        line_start = len(lines[0]) - len(lines[0].lstrip())
+        return '\n'.join(line[line_start:].rstrip() for line in lines)
+    else:
+        return None
+
 class Interpreter:
     def __init__(self, interface: ObjectInterface) -> None:
         self.interface = interface
@@ -10,7 +39,7 @@ class Interpreter:
         valid = True
         while valid:
             first_open = text.find('{', start)
-            first_close = text.find('}', start)
+            first_close = find_corresponding_close(text, '{', '}', first_open + 1)
             if first_open > 0 and first_close > 0 and first_open < first_close:
                 
                 # Textelemente auslesen
@@ -18,8 +47,12 @@ class Interpreter:
                 clear_indicator = indicator.lower().replace(' ', '')
                 content = text[first_open + 1: first_close]
                 
+                # Datentyp erzeugen
+                if clear_indicator.startswith('#'):
+                    self.__run_datatype_creation__(indicator[1:], content)
+
                 # Attribute erzeugen
-                if clear_indicator == '+attributes':
+                elif clear_indicator == '+attributes':
                     self.__run_attribute_creation__(content)
                 
                 # Klasse erzeugen
@@ -34,10 +67,51 @@ class Interpreter:
         self.interface.commit()
         logging.debug('Structure built')
 
+    def __run_datatype_creation__(self, datatype_name, text: str):
+        start = 0
+        generator = None
+        read_transformer_source = None
+        write_transformer_source = None
+        valid = True
+        while valid:
+
+            # Generator
+            if not generator:
+                first_comma = text.find(',', start)
+                if first_comma > 0:
+                    generator = text[start: first_comma].strip()
+                    start = first_comma + 1
+                else:
+                    generator = text.strip()
+                    valid = False
+
+            # Transformer Funktionen
+            else:
+                first_open = text.find('{', start)
+                indicator = text[start: first_open].lower().strip()
+                first_close = find_corresponding_close(text, '{', '}', first_open + 1)
+                source = correct_source_indentation(text[first_open + 1: first_close])
+                if indicator == 'get':
+                    read_transformer_source = source
+                elif indicator == 'set':
+                    write_transformer_source = source
+                else:
+                    logging.warning(f'Unknown transformer indicator {indicator}')
+                start = first_close + 1
+                first_comma = text.find(',', start)
+                if first_comma > 0:
+                    start = first_comma + 1
+                else:
+                    valid = False
+        if generator:
+            self.interface.create_datatype(datatype_name, generator, read_transformer_source, write_transformer_source)
+        else:
+            raise SyntaxError('Incorrect datatype definition')
+
     def __run_attribute_creation__(self, text: str):
         for a in [a.strip() for a in text.split(',')]:
             parameters = [p.strip() for p in a.split(':')]
-            self.interface.create_attribute(parameters[0], parameters[1])
+            self.interface.create_attribute(parameters[0], self.interface.get_datatype(name=parameters[1]))
 
     def __run_class_creation__(self, class_text: str, content_text: str):
         bracket_open = class_text.find('(')
@@ -69,13 +143,5 @@ class Interpreter:
                     indexed = True
                 else:
                     indexed = False
-                if '!' in parameters[0]:
-                    nullable = False
-                else:
-                    nullable = True
-                if len(parameters) > 1:
-                    default = parameters[1]
-                else:
-                    default = None
-                attribute_name = parameters[0].replace('*', '').replace('!', '')
-                self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed, nullable, default)
+                attribute_name = parameters[0].replace('*', '')
+                self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed)

@@ -1,13 +1,15 @@
 import sqlite3
 import logging
 from cache import StructureCache
-from control import Class, Attribute, AttributeAssignment, Reference, Object, ObjectList
+from control import Datatype, Class, Attribute, AttributeAssignment, Reference, Object, ObjectList
 from utils import get_data_table_name, get_reference_table_name, get_index_name, create_condition, print_table
 from programmability.handler import ExecutionHandler
 
 VERSION = '0.1'
 
 class ObjectInterface:
+
+    #region General
     def __init__(self, filename):
         self.filename = filename
         self.structure_cache = StructureCache()
@@ -51,7 +53,32 @@ class ObjectInterface:
     
     def __exit__(self, exception_type, exception_value, exception_traceback):
         self.disconnect()
+    #endregion
 
+    #region Datatype
+    def create_datatype(self, name: str, generator: str, read_transformer_source: str = None, write_transformer_source: str = None) -> Datatype:
+        """Creates new datatype and returns Datatype object"""
+        self.cursor.execute("INSERT INTO structure_datatype (name, generator, read_transformer_source, write_transformer_source) VALUES (?, ?, ?, ?)", (name, generator, read_transformer_source, write_transformer_source))
+        logging.debug(f"Created datatype {name} ({generator}, {'read transformer' if read_transformer_source else 'no read transformer'}, {'write transformer' if write_transformer_source else 'no write transformer'})")
+        return Datatype(self, self.cursor.lastrowid, name, generator, read_transformer_source, write_transformer_source)
+    
+    def get_datatype_from_db(self, id: int = None, name: str = None) -> Datatype:
+        """Reads a datatype from the database by its ID or name and returns a Datatype object"""
+        condition, parameters = create_condition(id, name)
+        self.cursor.execute(f"SELECT * FROM structure_datatype WHERE {condition}", parameters)
+        res = self.cursor.fetchone()
+        if res:
+            return Datatype(self, res['id'], res['name'], res['generator'], res['read_transformer_source'], res['write_transformer_source'])
+        else:
+            raise KeyError(f'Datatype {parameters[0]} not found')
+        
+    def get_datatype(self, id: int = None, name: str = None) -> Datatype:
+        """Reads a datatype from the database or cache if exists and returns a Datatype object"""
+        cached_datatype = self.structure_cache.get_datatype(id=id, name=name)
+        return cached_datatype if cached_datatype else self.get_datatype_from_db(id, name)
+    #endregion
+
+    #region Class
     def create_class(self, name: str, parent: Class = None):
         """Creates new class and returns Class object"""
         self.cursor.execute(f"CREATE TABLE {get_data_table_name(name)} (id INTEGER, version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(id, version))")
@@ -62,30 +89,6 @@ class ObjectInterface:
         logging.debug(f"Created new class {name}{f' as subclass of {parent.name}' if parent else ''}")
         return Class(self, self.cursor.lastrowid, name, parent.id if parent else None)
     
-    def create_attribute(self, name: str, generator: str):
-        """Creates a new attribute and returns Attribute object"""
-        self.cursor.execute("INSERT INTO structure_attribute (name, generator) VALUES (?, ?)", (name, generator))
-        logging.debug(f'Created new attribute {name}')
-        return Attribute(self, self.cursor.lastrowid, name, generator)
-
-    def create_reference(self, name: str, origin_class: Class, target_class: Class):
-        """Creates a new reference between two classes and returns Reference object"""
-        self.cursor.execute("INSERT INTO structure_reference (name, origin_class_id, target_class_id) VALUES (?, ?, ?)", (name, origin_class.id, target_class.id))
-        self.cursor.execute(f"CREATE TABLE {get_reference_table_name(name)} (origin_id INTEGER REFERENCES data_meta(id), target_id INTEGER REFERENCES data_meta(id), version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(origin_id, target_id, version))")
-        logging.debug(f'Created new reference {name} between class {origin_class.name} and {target_class.name}')
-        return Reference(self, self.cursor.lastrowid, name, origin_class, target_class)
-
-    def assign_attribute_to_class(self, class_, attribute: Attribute, indexed: bool = False, nullable: bool = True, default: str = None, getter_transformer_source: str = None, setter_transformer_source: str = None):
-        """Assigns given attribute to given class and return AttributeAssignment object"""
-        full_generator = f"{attribute.generator}{'' if nullable else ' NOT NULL'}{f' DEFAULT ?' if default else ''}"
-        parameters = (default,) if default else ()
-        self.cursor.execute(f"ALTER TABLE {get_data_table_name(class_.name)} ADD COLUMN {attribute.name} {full_generator}", parameters)
-        if indexed:
-            self.cursor.execute(f"CREATE INDEX {get_index_name(class_.name, attribute.name)} ON {get_data_table_name(class_.name)}({attribute.name})")
-        self.cursor.execute("INSERT INTO structure_attribute_assignment (class_id, attribute_id, indexed, nullable, 'default', getter_transformer_source, setter_transformer_source) VALUES (?, ?, ?, ?, ?, ?, ?)", (class_.id, attribute.id, indexed, nullable, default, getter_transformer_source, setter_transformer_source))
-        logging.debug(f'Assigned {attribute.name} to {class_.name}')
-        return AttributeAssignment(self, class_.id, attribute.id, indexed, nullable, default, getter_transformer_source, setter_transformer_source)
-
     def get_class_from_db(self, id: int = None, name: str = None):
         """Reads a class from the database by its ID or name and returns a Class object"""
         condition, parameters = create_condition(id, name)
@@ -101,6 +104,15 @@ class ObjectInterface:
         cached_class = self.structure_cache.get_class(id=id, name=name)
         return cached_class if cached_class else self.get_class_from_db(id, name)
     
+    def assign_attribute_to_class(self, class_, attribute: Attribute, indexed: bool = False, read_transformer_source: str = None, write_transformer_source: str = None) -> AttributeAssignment:
+        """Assigns given attribute to given class and return AttributeAssignment object"""
+        self.cursor.execute(f"ALTER TABLE {get_data_table_name(class_.name)} ADD COLUMN {attribute.name} {attribute.get_datatype().generator}")
+        if indexed:
+            self.cursor.execute(f"CREATE INDEX {get_index_name(class_.name, attribute.name)} ON {get_data_table_name(class_.name)}({attribute.name})")
+        self.cursor.execute("INSERT INTO structure_attribute_assignment (class_id, attribute_id, indexed, read_transformer_source, write_transformer_source) VALUES (?, ?, ?, ?, ?)", (class_.id, attribute.id, indexed, read_transformer_source, write_transformer_source))
+        logging.debug(f'Assigned {attribute.name} to {class_.name}')
+        return AttributeAssignment(self, class_.id, attribute.id, indexed, read_transformer_source, write_transformer_source)
+    
     def get_child_classes(self, class_: Class):
         """Returns the classes that have the given class as parent"""
         self.cursor.execute("SELECT id FROM structure_class WHERE parent_id = ?", (class_.id,))
@@ -109,7 +121,15 @@ class ObjectInterface:
     def get_attribute_assignments_from_db(self, class_: Class) -> list:
         """Retrieves attributes assigned to a class from the database"""
         self.cursor.execute("SELECT * FROM structure_attribute_assignment WHERE class_id = ?", (class_.id,))
-        return [AttributeAssignment(self, class_.id, row['attribute_id'], row['indexed'], row['nullable'], row['default'], row['getter_transformer_source'], row['setter_transformer_source']) for row in self.cursor.fetchall()]
+        return [AttributeAssignment(self, class_.id, row['attribute_id'], row['indexed'], row['read_transformer_source'], row['write_transformer_source']) for row in self.cursor.fetchall()]
+    #endregion
+
+    #region Attribute
+    def create_attribute(self, name: str, datatype: Datatype):
+        """Creates a new attribute and returns Attribute object"""
+        self.cursor.execute("INSERT INTO structure_attribute (name, datatype_id) VALUES (?, ?)", (name, datatype.id))
+        logging.debug(f'Created new attribute {name}')
+        return Attribute(self, self.cursor.lastrowid, name, datatype.id)
 
     def get_attribute_from_db(self, id: int = None, name: str = None):
         """Reads an attribute from the database by its ID or name and returns an Attribute object"""
@@ -117,14 +137,23 @@ class ObjectInterface:
         self.cursor.execute(f"SELECT * FROM structure_attribute WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
-            return Attribute(self, res['id'], res['name'], res['generator'])
+            return Attribute(self, res['id'], res['name'], res['datatype_id'])
         else:
             raise KeyError(f'Attribute {parameters[0]} not found')
-        
+
     def get_attribute(self, id: int = None, name: str = None):
         """Reads an attribute from the database or cache if exists and returns an Attribute object"""
         cached_attribute = self.structure_cache.get_attribute(id=id, name=name)
         return cached_attribute if cached_attribute else self.get_attribute_from_db(id, name)
+    #endregion
+
+    #region Reference
+    def create_reference(self, name: str, origin_class: Class, target_class: Class):
+        """Creates a new reference between two classes and returns Reference object"""
+        self.cursor.execute("INSERT INTO structure_reference (name, origin_class_id, target_class_id) VALUES (?, ?, ?)", (name, origin_class.id, target_class.id))
+        self.cursor.execute(f"CREATE TABLE {get_reference_table_name(name)} (origin_id INTEGER REFERENCES data_meta(id), target_id INTEGER REFERENCES data_meta(id), version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(origin_id, target_id, version))")
+        logging.debug(f'Created new reference {name} between class {origin_class.name} and {target_class.name}')
+        return Reference(self, self.cursor.lastrowid, name, origin_class, target_class)
 
     def get_reference_from_db(self, id: int = None, name: str = None):
         """Reads a reference from the database by its ID or name and returns a Reference object"""
@@ -140,7 +169,9 @@ class ObjectInterface:
         """Reads a reference from the database or cache if exists and returns a Reference object"""
         cached_reference = self.structure_cache.get_reference(id=id, name=name)
         return cached_reference if cached_reference else self.get_reference_from_db(id, name)
+    #endregion
     
+    #region Object
     def create_object(self, class_, **attributes):
         """Inserts an object with the given class and attributes into the database"""
 
@@ -154,20 +185,20 @@ class ObjectInterface:
             self.modify(object, **attributes)
         return object
     
-    def modify(self, object: Object, **attributes) -> Object:
+    def modify(self, object_: Object, **attributes) -> Object:
         """Modifies the given objects with the given attributes"""
 
         # Get next version number
-        self.cursor.execute('SELECT current_version FROM data_meta WHERE id = ?', (object.id,))
+        self.cursor.execute('SELECT current_version FROM data_meta WHERE id = ?', (object_.id,))
         current_version = self.cursor.fetchone()['current_version']
         new_version = current_version + 1
 
-        for current_class in object.get_class().get_family_tree():
+        for current_class in object_.get_class().get_family_tree():
             table_name = get_data_table_name(current_class.name)
 
-            # Get attributes that are assigned to the current class and are given as parameter
+            # Get attributes that are assigned to the current class and are given as parameter and transform them for insertion into database
             class_attribute_names = [a.name for a in current_class.get_assigned_attributes()]
-            current_attributes = {k: v for k, v in attributes.items() if k in class_attribute_names}
+            current_attributes = {k: current_class.get_attribute_assignment(k).transform_write_value(v, object_) for k, v in attributes.items() if k in class_attribute_names}
             
             # Insert / Update attributes
             if current_attributes:
@@ -175,7 +206,7 @@ class ObjectInterface:
                 # Get columns to adopt from current version
                 cols_to_adopt = [col for col in class_attribute_names if col not in current_attributes.keys()]
                 if len(cols_to_adopt) > 0:
-                    self.cursor.execute(f"SELECT {', '.join(cols_to_adopt)} FROM {table_name} WHERE id = ? AND version = ?", (object.id, current_version))
+                    self.cursor.execute(f"SELECT {', '.join(cols_to_adopt)} FROM {table_name} WHERE id = ? AND version = ?", (object_.id, current_version))
                     values_to_adopt = self.cursor.fetchone()
                     if values_to_adopt:
                         current_attributes.update(dict(values_to_adopt))
@@ -183,16 +214,16 @@ class ObjectInterface:
                 # Insert new version
                 str_cols = ', '.join(current_attributes.keys())
                 str_placeholder = ', '.join(['?'] * len(current_attributes.keys()))
-                self.cursor.execute(f"INSERT INTO {table_name} (id, version, {str_cols}) VALUES (?, ?, {str_placeholder})", (object.id, new_version, *current_attributes.values()))
+                self.cursor.execute(f"INSERT INTO {table_name} (id, version, {str_cols}) VALUES (?, ?, {str_placeholder})", (object_.id, new_version, *current_attributes.values()))
 
             # No changes => Just update version
             else:
-                self.cursor.execute(f'UPDATE {table_name} SET version = ? WHERE id = ? AND version = ?', (new_version, object.id, current_version))
+                self.cursor.execute(f'UPDATE {table_name} SET version = ? WHERE id = ? AND version = ?', (new_version, object_.id, current_version))
 
         # Set new version to the current version
-        self.cursor.execute('UPDATE data_meta SET current_version = ? WHERE id = ?', (new_version, object.id))
-        object.attributes.update(attributes)
-        return object
+        self.cursor.execute('UPDATE data_meta SET current_version = ? WHERE id = ?', (new_version, object_.id))
+        object_.attributes.update(attributes)
+        return object_
     
     def __get_class_view_sql__(self, class_: Class):
         strs_joins = []
@@ -263,6 +294,7 @@ class ObjectInterface:
         table_name = get_reference_table_name(reference.name)
         self.cursor.execute(f"SELECT target_id FROM {table_name} WHERE origin_id = ? AND version = ?", (origin.id, version))
         return self.create_object_list([self.get_object(row['target_id']) for row in self.cursor.fetchall()])
+    #endregion
 
     def create_object_list(self, objects: list = []) -> ObjectList:
         """Creates ObjectList object from the given list"""

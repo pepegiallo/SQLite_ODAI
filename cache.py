@@ -1,4 +1,4 @@
-from control import Class, Attribute, Reference
+from control import Datatype, Class, Attribute, Reference
 from utils import get_filled_parameter_name
 
 class DictCache:
@@ -33,9 +33,24 @@ class DictCache:
 
 class StructureCache:
     def __init__(self) -> None:
+        self.datatype_cache = DictCache('id', 'name')
         self.class_cache = DictCache('id', 'name')
         self.attribute_cache = DictCache('id', 'name')
         self.reference_cache = DictCache('id', 'name')
+
+    def store_datatype(self, datatype: Datatype) -> None:
+        """ Fügt einen Datentyp hinzu """
+        self.datatype_cache.store(datatype)
+
+    def get_datatype(self, **key_parameters) -> Datatype:
+        """ Gibt ein Datentypobjekt anhand 'id' oder 'name' zurück """
+        key = get_filled_parameter_name(**key_parameters)
+        return self.datatype_cache.get(key, key_parameters[key])
+
+    def contains_datatype(self, **key_parameters) -> bool:
+        """ Gibt anhand 'id' oder 'name' zurück, ob der Datentyp im Cache vorhanden ist """
+        key = get_filled_parameter_name(**key_parameters)
+        return self.datatype_cache.contains(key, key_parameters[key])
 
     def store_class(self, class_: Class) -> None:
         """ Fügt ein Klassenobjekt hinzu """

@@ -1,13 +1,28 @@
+#int {
+    INTEGER
+}
+#text100 {
+    VARCHAR(100)
+}
+#text {
+    TEXT
+}
+#date {
+    DATE,
+    get {
+        value = parse_sqlite_date(value)
+    }
+}
 +attributes {
-    first_name: VARCHAR(100),
-    last_name: VARACHAR(100),
-    number: INTEGER,
-    street: VARCHAR(100),
-    house_number: VARCHAR(8),
-    zip: VARCHAR(5),
-    city: VARCHAR(100),
-    birthday: DATE,
-    entry_date: DATE
+    first_name: text100,
+    last_name: text100,
+    number: int,
+    street: text100,
+    house_number: text100,
+    zip: text100,
+    city: text100,
+    birthday: date,
+    entry_date: date
 }
 Address {
     street,
@@ -22,7 +37,7 @@ Person {
     ~person_to_address -> Address
 }
 Employee(Person) {
-    number!*,
+    number*,
     entry_date,
     ~manager_to_employees -> Employee
 }

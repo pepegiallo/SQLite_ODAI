@@ -1,3 +1,9 @@
+from datetime import datetime
+from decimal import Decimal
+import math
+import numpy as np
+from io import BytesIO
+
 def get_data_table_name(class_name: str) -> str:
     return f"data_{class_name}"
 
@@ -44,3 +50,24 @@ def remove_duplicates(objects: list):
             unique_ids.add(obj.id)
             unique_objects.append(obj)
     return unique_objects
+
+def parse_sqlite_date(str_date: str) -> datetime:
+    return datetime.strptime(str_date, r'%Y-%m-%d').date()
+
+def parse_sqlite_datetime(str_datetime: str) -> datetime:
+    return datetime.strptime(str_datetime, r'%Y-%m-%d %H:%M:%S')
+
+def create_decimal(base_value: int, decimal_digits: int) -> Decimal:
+    return Decimal(base_value) / Decimal(math.pow(10, decimal_digits))
+
+def get_decimal_base_value(decimal_: Decimal, decimal_digits: int) -> int:
+    return int(decimal_ * int(math.pow(10, decimal_digits)))
+
+def array_to_bytes(array: np.array) -> bytes:
+    buffer = BytesIO()
+    np.save(buffer, array, allow_pickle=True)
+    return buffer.getvalue()
+
+def bytes_to_array(bytes_: bytes) -> np.array:
+    buffer = BytesIO(bytes_)
+    return np.load(buffer, allow_pickle=True)
