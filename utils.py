@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 import math
 import numpy as np
@@ -54,8 +54,14 @@ def remove_duplicates(objects: list):
 def parse_sqlite_date(str_date: str) -> datetime:
     return datetime.strptime(str_date, r'%Y-%m-%d').date()
 
+def date_to_string(d: date) -> str:
+    return d.strftime(r'%Y-%m-%d')
+
 def parse_sqlite_datetime(str_datetime: str) -> datetime:
     return datetime.strptime(str_datetime, r'%Y-%m-%d %H:%M:%S')
+
+def datetime_to_string(dt: datetime) -> str:
+    return dt.strftime(r'%Y-%m-%d %H:%M:%S')
 
 def create_decimal(base_value: int, decimal_digits: int) -> Decimal:
     return Decimal(base_value) / Decimal(math.pow(10, decimal_digits))

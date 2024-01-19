@@ -11,15 +11,16 @@ class Datatype(ObjectInterfaceControl):
         self.id = id
         self.name = name
         self.generator = generator
+
+        # Transformfunktionen
         self.read_transformer_source = read_transformer_source
+        self.transform_read_value = interface.execution_handler.generate_transformer(read_transformer_source, parameters=['value'])
         self.write_transformer_source = write_transformer_source
+        self.transform_write_value = interface.execution_handler.generate_transformer(write_transformer_source, parameters=['value'])
+
+        # In den Cache einfügen
         interface.structure_cache.store_datatype(self)
 
-    def transform_read_value(self, value):
-        return self.interface.execution_handler.transform_value(self.read_transformer_source, value)
-    
-    def transform_write_value(self, value):
-        return self.interface.execution_handler.transform_value(self.write_transformer_source, value)
 
 class Class(ObjectInterfaceControl):
     def __init__(self, interface, id: int, name: str, parent_id: int) -> None:
@@ -112,11 +113,20 @@ class AttributeAssignment(ObjectInterfaceControl):
         self.class_id = class_id
         self.attribute_id = attribute_id
         self.indexed = indexed
+
+        # Eigene Transformfunktionen
         self.read_transformer_source = read_transformer_source
+        self.transform_read_value = interface.execution_handler.generate_transformer(read_transformer_source, parameters=['value', 'this'])
         self.write_transformer_source = write_transformer_source
+        self.transform_write_value = interface.execution_handler.generate_transformer(write_transformer_source, parameters=['value', 'this'])
+        
+        # Transformfunktionen des Datentyps
         datatype = self.get_attribute().get_datatype()
         self.datatype_transform_read_value = datatype.transform_read_value
         self.datatype_transform_write_value = datatype.transform_write_value
+
+    def transform_write_processed_to_raw_value(self, value, object_):
+        return self.transform_write_value(self.datatype_transform_write_value(value), object_)
 
     def get_class(self) -> Class:
         """ Gibt Klassenobjekt zurück """
@@ -126,25 +136,6 @@ class AttributeAssignment(ObjectInterfaceControl):
         """ Gibt Attributobjekt zurück """
         return self.interface.get_attribute(id=self.attribute_id)
 
-    def __transform_value__(self, source: str, value, object_):
-        """ Wandelt den gegebenen Wert mit dem gegebenen Python-Code um. Das übergebene Objekt ist als this verwendbar. """
-        return self.interface.execution_handler.transform_value(source, value, this=object_)
-    
-    def transform_read_value(self, value, object_):
-
-        # Datatype transformer
-        value = self.datatype_transform_read_value(value)
-
-        # Assignment transformer
-        return self.__transform_value__(self.read_transformer_source, value, object_)
-
-    def transform_write_value(self, value, object_):
-
-        # Assignment transformer
-        value = self.__transform_value__(self.write_transformer_source, value, object_)
-
-        # Datatype transformer
-        return self.datatype_transform_write_value(value)
 
 class Reference(ObjectInterfaceControl):
     def __init__(self, interface, id: str, name: str, origin_class_id: str, target_class_id: str) -> None:
@@ -164,12 +155,14 @@ class Reference(ObjectInterfaceControl):
         return self.interface.get_class(id=self.target_class_id)
 
 class Object(ObjectInterfaceControl):
-    def __init__(self, interface, id: str, class_: Class, created: datetime, **attributes):
+    def __init__(self, interface, id: str, class_: Class, created: datetime, **raw_attributes):
         super().__init__(interface)
         self.id = id
         self.class_ = class_
         self.created = created
-        self.attributes = attributes
+        self.raw_attributes = raw_attributes
+        self.__attributes__ =  {}
+        self.__unprocessed_attributes__ = {}
 
     def __getitem__(self, key: str):
         return self.get_value(key)
@@ -177,6 +170,9 @@ class Object(ObjectInterfaceControl):
     def get_class(self) -> Class:
         """ Gibt die Klasse des Objekts zurück """
         return self.class_
+    
+    def get_attribute_names(self) -> list:
+        return self.raw_attributes.keys()
 
     def modify(self, **attributes):
         """ Aktualisiert die übergebenen Attribute """
@@ -190,20 +186,44 @@ class Object(ObjectInterfaceControl):
 
     def dump(self):
         """ Gibt String mit allen Objekteigenschaften zurück """
-        str_attributes = '\n  '.join(f'{attribute} = {value}' for attribute, value in self.attributes.items())
+        str_attributes = '\n  '.join(f'{attribute_name} = {self[attribute_name]}' for attribute_name in self.get_attribute_names())
         return f'{self.class_.name} {self.id}:\n  {str_attributes}'
     
-    def get_value(self, attribute_name: str):
+    def update_raw_attributes(self, **raw_attributes):
+        self.raw_attributes.update(raw_attributes)
+        for key in raw_attributes.keys():
+            self.__attributes__.pop(key, None)
+            self.__unprocessed_attributes__.pop(key, None)
+    
+    def calculate_value(self, attribute_name: str):
+        """ Berechnet den finalen Attributwert mithilfe der Lesen-Methode der Attributzuweisung """
         assignment = self.class_.get_attribute_assignment(attribute_name)
-        if assignment:
-            return assignment.transform_read_value(self.attributes[attribute_name], self)
+        self.__attributes__[attribute_name] = assignment.transform_read_value(self.get_unprocessed_value(attribute_name), self)
+
+    def calculate_unprocessed_value(self, attribute_name: str):
+        """ Berechnet den Attributwert mithilfe der Umwandlungsmethode des Datentyps """
+        assignment = self.class_.get_attribute_assignment(attribute_name)
+        self.__unprocessed_attributes__[attribute_name] = assignment.datatype_transform_read_value(self.raw_attributes[attribute_name])
+    
+    def get_value(self, attribute_name: str):
+        if attribute_name in self.raw_attributes.keys():
+            if not attribute_name in self.__attributes__.keys():
+                self.calculate_value(attribute_name)
+            return self.__attributes__[attribute_name]
         else:
             raise KeyError(f'Invalid attribute {attribute_name}')
-    
+        
+    def get_unprocessed_value(self, attribute_name: str):
+        if attribute_name in self.raw_attributes.keys():
+            if not attribute_name in self.__unprocessed_attributes__.keys():
+                self.calculate_unprocessed_value(attribute_name)
+            return self.__unprocessed_attributes__[attribute_name]
+        else:
+            raise KeyError(f'Invalid attribute {attribute_name}')
+        
     def get_raw_value(self, attribute_name: str):
-        assignment = self.class_.get_attribute_assignment(attribute_name)
-        if assignment:
-            return assignment.datatype_transform_read_value(self.attributes[attribute_name])
+        if attribute_name in self.raw_attributes.keys():
+            return self.raw_attributes[attribute_name]
         else:
             raise KeyError(f'Invalid attribute {attribute_name}')
         

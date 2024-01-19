@@ -10,16 +10,19 @@
 #date {
     DATE,
     get {
-        value = parse_sqlite_date(value)
+        return parse_sqlite_date(value)
+    }
+    set {
+        return date_to_string(value)
     }
 }
 #array {
     BLOB,
     get {
-        value = bytes_to_array(value)
-    },
+        return bytes_to_array(decompress(value))
+    }
     set {
-        value = array_to_bytes(value)
+        return compress(array_to_bytes(value))
     }
 }
 +attributes {

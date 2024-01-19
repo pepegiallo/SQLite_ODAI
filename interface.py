@@ -187,6 +187,7 @@ class ObjectInterface:
     
     def modify(self, object_: Object, **attributes) -> Object:
         """Modifies the given objects with the given attributes"""
+        raw_attributes = {}
 
         # Get next version number
         self.cursor.execute('SELECT current_version FROM data_meta WHERE id = ?', (object_.id,))
@@ -198,7 +199,10 @@ class ObjectInterface:
 
             # Get attributes that are assigned to the current class and are given as parameter and transform them for insertion into database
             class_attribute_names = [a.name for a in current_class.get_assigned_attributes()]
-            current_attributes = {k: current_class.get_attribute_assignment(k).transform_write_value(v, object_) for k, v in attributes.items() if k in class_attribute_names}
+            current_attributes = {k: current_class.get_attribute_assignment(k).transform_write_processed_to_raw_value(v, object_) for k, v in attributes.items() if k in class_attribute_names}
+
+            # Add transformed attributes to raw attribute dict
+            raw_attributes.update(current_attributes)
             
             # Insert / Update attributes
             if current_attributes:
@@ -222,7 +226,7 @@ class ObjectInterface:
 
         # Set new version to the current version
         self.cursor.execute('UPDATE data_meta SET current_version = ? WHERE id = ?', (new_version, object_.id))
-        object_.attributes.update(attributes)
+        object_.update_raw_attributes(**raw_attributes)
         return object_
     
     def __get_class_view_sql__(self, class_: Class):
