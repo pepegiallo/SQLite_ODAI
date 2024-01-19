@@ -1,4 +1,5 @@
 .venv
+.vscode
 __pycache__
 examples\__pycache__
 programmability\__pycache__
