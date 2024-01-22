@@ -38,6 +38,7 @@ class Interpreter:
         self.interface = interface
 
     def run(self, text: str):
+        """ Run ddl script """
         start = 0
         valid = True
         while valid:
@@ -71,6 +72,7 @@ class Interpreter:
         logging.debug('Structure built')
 
     def __run_datatype_creation__(self, datatype_name, text: str):
+        """ Creates new datatype with the given name and ddl text """
         start = 0
         generator = None
         read_transformer_source = None
@@ -110,11 +112,63 @@ class Interpreter:
             raise SyntaxError('Incorrect datatype definition')
 
     def __run_attribute_creation__(self, text: str):
+        """ Run attribute creation with the given ddl text """
         for a in [a.strip() for a in text.split(',')]:
             parameters = [p.strip() for p in a.split(':')]
             self.interface.create_attribute(parameters[0], self.interface.get_datatype(name=parameters[1]))
 
     def __run_class_creation__(self, class_text: str, content_text: str):
+            bracket_open = class_text.find('(')
+            bracket_close = class_text.find(')')
+            
+            # Mit Parent
+            if bracket_open > 0 and bracket_close > 0 and bracket_open < bracket_close:
+                class_name = class_text[0: bracket_open]
+                parent = self.interface.get_class(name=class_text[bracket_open + 1: bracket_close])
+
+            # Ohne Parent
+            else:
+                class_name = class_text
+                parent = None
+            class_ = self.interface.create_class(class_name, parent)
+
+            # Attribute und Referenzen
+            start = 0
+            first_comma = content_text.find(',', start)
+            first_open = content_text.find(DEF_OPEN, start)
+            if first_comma > 0 and first_open > 0:
+
+                # Keine Transformer
+                if first_comma < first_open:
+                    element_text = content_text[start: first_comma]
+                    
+                    # Referenz
+                    if element_text.startswith('~'):
+                        self.__run_reference_creation__(element_text, class_)
+
+                    # Attributzuweisung
+                    else:
+                        self.__run_attribute_assignment__(element_text, class_)
+                ### HIER WEITERMACHEN ###
+
+    def __run_reference_creation__(self, text: str, class_):
+        """ Create new reference with the given ddl text at the given class """
+        parameters = [p.strip() for p in text.split('->')]
+        reference_name = parameters[0][1:]
+        self.interface.create_reference(reference_name, class_, self.interface.get_class(name=parameters[1]))
+
+    def __run_attribute_assignment__(self, text: str, class_):
+        """ Assigns an existing attribute by the given ddl text to the given class """
+        parameters = [p.strip() for p in text.split(':')]
+        if '*' in parameters[0]:
+            indexed = True
+        else:
+            indexed = False
+        attribute_name = parameters[0].replace('*', '')
+        self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed)
+
+
+    def __run_class_creation_deprecated__(self, class_text: str, content_text: str):
         bracket_open = class_text.find('(')
         bracket_close = class_text.find(')')
         

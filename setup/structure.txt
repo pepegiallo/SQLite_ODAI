@@ -40,7 +40,14 @@
 Address {
     street,
     house_number,
-    zip,
+    zip {
+        get {
+            return value
+        }
+        set {
+            return value
+        }
+    }
     city
 }
 Person {
