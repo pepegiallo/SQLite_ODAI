@@ -42,12 +42,12 @@ Address {
     house_number,
     zip {
         get {
-            return value
+            return 'PLZ ' + str(value)
         }
         set {
-            return value
+            return str(value).replace('PLZ ', '')
         }
-    }
+    },
     city
 }
 Person {

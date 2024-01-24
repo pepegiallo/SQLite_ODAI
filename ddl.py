@@ -134,22 +134,42 @@ class Interpreter:
 
             # Attribute und Referenzen
             start = 0
-            first_comma = content_text.find(',', start)
-            first_open = content_text.find(DEF_OPEN, start)
-            if first_comma > 0 and first_open > 0:
+            valid = True
+            while valid:
 
-                # Keine Transformer
-                if first_comma < first_open:
+                # Ende des Elements finden und Elementtext extrahieren
+                first_comma = content_text.find(',', start)
+                first_open = content_text.find(DEF_OPEN, start)
+
+                # Kein Komma und kein Transformer => Letztes Element
+                if first_comma < 0 and first_open < 0:
+                    element_text = content_text[start:]
+                    valid = False
+
+                # Nur Komma gefunden oder Komma vor Transformer => Element ohne Transformer
+                elif first_comma >= 0 and first_open < 0 or first_comma < first_open:
                     element_text = content_text[start: first_comma]
-                    
-                    # Referenz
-                    if element_text.startswith('~'):
-                        self.__run_reference_creation__(element_text, class_)
+                    start = first_comma + 1
 
-                    # Attributzuweisung
+                # Sonst => Element mit Transformer
+                else:
+                    first_close = find_corresponding_close(content_text, DEF_OPEN, DEF_CLOSE, first_open + 1)
+                    element_text = content_text[start: first_close]
+                    next_comma = content_text.find(',', first_close)
+                    
+                    # Letztes Element?
+                    if next_comma < 0:
+                        valid = False
                     else:
-                        self.__run_attribute_assignment__(element_text, class_)
-                ### HIER WEITERMACHEN ###
+                        start = next_comma + 1
+
+                # Referenz
+                if element_text.strip().startswith('~'):
+                    self.__run_reference_creation__(element_text, class_)
+
+                # Attributzuweisung
+                else:
+                    self.__run_attribute_assignment__(element_text, class_)
 
     def __run_reference_creation__(self, text: str, class_):
         """ Create new reference with the given ddl text at the given class """
@@ -159,44 +179,37 @@ class Interpreter:
 
     def __run_attribute_assignment__(self, text: str, class_):
         """ Assigns an existing attribute by the given ddl text to the given class """
-        parameters = [p.strip() for p in text.split(':')]
-        if '*' in parameters[0]:
-            indexed = True
+        read_transformer_source = None
+        write_transformer_source = None
+        start = 0
+        first_open = text.find(DEF_OPEN, start)
+
+        # Keine Transformer funktionen
+        if first_open < 0:
+            attribute_text = text.strip()
+
+        # Transformer funktionen
         else:
-            indexed = False
-        attribute_name = parameters[0].replace('*', '')
-        self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed)
-
-
-    def __run_class_creation_deprecated__(self, class_text: str, content_text: str):
-        bracket_open = class_text.find('(')
-        bracket_close = class_text.find(')')
-        
-        # Mit Parent
-        if bracket_open > 0 and bracket_close > 0 and bracket_open < bracket_close:
-            class_name = class_text[0: bracket_open]
-            parent = self.interface.get_class(name=class_text[bracket_open + 1: bracket_close])
-
-        # Ohne Parent
-        else:
-            class_name = class_text
-            parent = None
-        class_ = self.interface.create_class(class_name, parent)
-
-        for e in [e.strip() for e in content_text.split(',')]:
-
-            # Referenz
-            if e.startswith('~'):
-                parameters = [p.strip() for p in e.split('->')]
-                reference_name = parameters[0][1:]
-                self.interface.create_reference(reference_name, class_, self.interface.get_class(name=parameters[1]))
-
-            # Attributzuweisung
-            else:
-                parameters = [p.strip() for p in e.split(':')]
-                if '*' in parameters[0]:
-                    indexed = True
+            attribute_text = text[start: first_open].strip()
+            start = first_open + 1
+            valid = True
+            while valid:
+                first_open = text.find(DEF_OPEN, start)
+                first_close = find_corresponding_close(text, DEF_OPEN, DEF_CLOSE, first_open + 1)
+                if first_open > 0 and first_close > 0 and first_open < first_close:
+                    indicator = text[start: first_open].lower().strip()
+                    source = correct_source_indentation(text[first_open + 1: first_close])
+                    if indicator == 'get':
+                        read_transformer_source = source
+                    elif indicator == 'set':
+                        write_transformer_source = source
+                    else:
+                        logging.warning(f'Unknown transformer indicator {indicator}')
+                    start = first_close + 1
                 else:
-                    indexed = False
-                attribute_name = parameters[0].replace('*', '')
-                self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed)
+                    valid = False
+
+        # Attribut zuweisen
+        attribute_name = attribute_text.replace('*', '')
+        indexed = len(attribute_text) > len(attribute_name)
+        self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed, read_transformer_source, write_transformer_source)
