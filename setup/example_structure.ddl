@@ -1,3 +1,6 @@
+#void {
+    TINYINT
+}
 #int {
     INTEGER
 }
@@ -52,6 +55,7 @@
 +attributes {
     first_name: shorttext,
     last_name: shorttext,
+    full_name: void,
     number: int,
     street: shorttext,
     house_number: shorttext,
@@ -59,13 +63,18 @@
     city: shorttext,
     price: currency2,
     creation_time: datetime,
-    product_name: longtext,
+    name: longtext,
     amount: int,
     birthday: date
 }
 Person {
     first_name,
     last_name,
+    full_name {
+        get {
+            return this['first_name'] + ' ' + this['last_name']
+        }
+    },
     birthday
 }
 Customer(Person) {
@@ -75,7 +84,7 @@ Customer(Person) {
     city
 }
 Product {
-    product_name,
+    name,
     price
 }
 OrderPosition {
