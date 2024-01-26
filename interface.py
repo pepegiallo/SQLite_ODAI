@@ -54,6 +54,52 @@ class ObjectInterface:
     def __exit__(self, exception_type, exception_value, exception_traceback):
         self.disconnect()
     #endregion
+        
+    #region Parser
+    def parse_datatype(self, value: Datatype | int | str) -> Datatype:
+        """Convert given value to Datatype object"""
+        if isinstance(value, Datatype):
+            return value
+        elif isinstance(value, int):
+            return self.get_datatype(id=value)
+        elif isinstance(value, str):
+            return self.get_datatype(name=value)
+        else:
+            raise TypeError(f'Type {type(value)} cannot be converted to Datatype object.')
+        
+    def parse_class(self, value: Class | int | str) -> Class:
+        """Convert given value to Class object"""
+        if isinstance(value, Class):
+            return value
+        elif isinstance(value, int):
+            return self.get_class(id=value)
+        elif isinstance(value, str):
+            return self.get_class(name=value)
+        else:
+            raise TypeError(f'Type {type(value)} cannot be converted to Class object.')
+        
+    def parse_attribute(self, value: Attribute | int | str) -> Attribute:
+        """Convert given value to Attribute object"""
+        if isinstance(value, Attribute):
+            return value
+        elif isinstance(value, int):
+            return self.get_attribute(id=value)
+        elif isinstance(value, str):
+            return self.get_attribute(name=value)
+        else:
+            raise TypeError(f'Type {type(value)} cannot be converted to Attribute object.')
+        
+    def parse_reference(self, value: Reference | int | str) -> Reference:
+        """Convert given value to Reference object"""
+        if isinstance(value, Reference):
+            return value
+        elif isinstance(value, int):
+            return self.get_reference(id=value)
+        elif isinstance(value, str):
+            return self.get_reference(name=value)
+        else:
+            raise TypeError(f'Type {type(value)} cannot be converted to Reference object.')
+    #endregion
 
     #region Datatype
     def create_datatype(self, name: str, generator: str, read_transformer_source: str = None, write_transformer_source: str = None) -> Datatype:
@@ -104,8 +150,10 @@ class ObjectInterface:
         cached_class = self.structure_cache.get_class(id=id, name=name)
         return cached_class if cached_class else self.get_class_from_db(id, name)
     
-    def assign_attribute_to_class(self, class_, attribute: Attribute, indexed: bool = False, read_transformer_source: str = None, write_transformer_source: str = None) -> AttributeAssignment:
+    def assign_attribute_to_class(self, class_: Class | int | str, attribute: Attribute | int | str, indexed: bool = False, read_transformer_source: str = None, write_transformer_source: str = None) -> AttributeAssignment:
         """Assigns given attribute to given class and return AttributeAssignment object"""
+        class_ = self.parse_class(class_)
+        attribute = self.parse_attribute(attribute)
         self.cursor.execute(f"ALTER TABLE {get_data_table_name(class_.name)} ADD COLUMN {attribute.name} {attribute.get_datatype().generator}")
         if indexed:
             self.cursor.execute(f"CREATE INDEX {get_index_name(class_.name, attribute.name)} ON {get_data_table_name(class_.name)}({attribute.name})")
@@ -113,20 +161,23 @@ class ObjectInterface:
         logging.debug(f'Assigned {attribute.name} to {class_.name}')
         return AttributeAssignment(self, class_.id, attribute.id, indexed, read_transformer_source, write_transformer_source)
     
-    def get_child_classes(self, class_: Class):
+    def get_child_classes(self, class_: Class | int | str):
         """Returns the classes that have the given class as parent"""
+        class_ = self.parse_class(class_)
         self.cursor.execute("SELECT id FROM structure_class WHERE parent_id = ?", (class_.id,))
         return [self.get_class(id=row['id']) for row in self.cursor.fetchall()]
     
-    def get_attribute_assignments_from_db(self, class_: Class) -> list:
+    def get_attribute_assignments_from_db(self, class_: Class | int | str) -> list:
         """Retrieves attributes assigned to a class from the database"""
+        class_ = self.parse_class(class_)
         self.cursor.execute("SELECT * FROM structure_attribute_assignment WHERE class_id = ?", (class_.id,))
         return [AttributeAssignment(self, class_.id, row['attribute_id'], row['indexed'], row['read_transformer_source'], row['write_transformer_source']) for row in self.cursor.fetchall()]
     #endregion
 
     #region Attribute
-    def create_attribute(self, name: str, datatype: Datatype):
+    def create_attribute(self, name: str, datatype: Datatype | int | str):
         """Creates a new attribute and returns Attribute object"""
+        datatype = self.parse_datatype(datatype)
         self.cursor.execute("INSERT INTO structure_attribute (name, datatype_id) VALUES (?, ?)", (name, datatype.id))
         logging.debug(f'Created new attribute {name}')
         return Attribute(self, self.cursor.lastrowid, name, datatype.id)
@@ -148,8 +199,10 @@ class ObjectInterface:
     #endregion
 
     #region Reference
-    def create_reference(self, name: str, origin_class: Class, target_class: Class):
+    def create_reference(self, name: str, origin_class: Class | int | str, target_class: Class | int | str):
         """Creates a new reference between two classes and returns Reference object"""
+        origin_class = self.parse_class(origin_class)
+        target_class = self.parse_class(target_class)
         self.cursor.execute("INSERT INTO structure_reference (name, origin_class_id, target_class_id) VALUES (?, ?, ?)", (name, origin_class.id, target_class.id))
         self.cursor.execute(f"CREATE TABLE {get_reference_table_name(name)} (origin_id INTEGER REFERENCES data_meta(id), target_id INTEGER REFERENCES data_meta(id), version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(origin_id, target_id, version))")
         logging.debug(f'Created new reference {name} between class {origin_class.name} and {target_class.name}')
@@ -172,8 +225,9 @@ class ObjectInterface:
     #endregion
     
     #region Object
-    def create_object(self, class_, **attributes):
+    def create_object(self, class_: Class | int | str, **attributes):
         """Inserts an object with the given class and attributes into the database"""
+        class_ = self.parse_class(class_)
 
         # Zuerst das Objekt in data_meta einfügen und ID erhalten
         self.cursor.execute("INSERT INTO data_meta (class_id) VALUES (?) RETURNING id, created", (class_.id,))
@@ -257,8 +311,9 @@ class ObjectInterface:
         self.cursor.execute(f"{self.__get_class_view_sql__(class_)} AND data_meta.id = ?", (id,))
         return Object(self, id, class_, meta['created'], **dict(self.cursor.fetchone()))
     
-    def bind(self, reference: Reference, origin: Object, targets: list, rebind: bool = False):
+    def bind(self, reference: Reference | int | str, origin: Object, targets: list, rebind: bool = False):
         """Binds two objects using the given reference"""
+        reference = self.parse_reference(reference)
 
         # Get current and next version number
         self.cursor.execute('INSERT OR IGNORE INTO structure_reference_version (reference_id, origin_object_id) VALUES (?, ?)', (reference.id, origin.id))
@@ -283,9 +338,10 @@ class ObjectInterface:
         # Apply new version
         self.cursor.execute("UPDATE structure_reference_version SET current_version = ? WHERE reference_id = ? AND origin_object_id = ?", (new_version, reference.id, origin.id))
 
-    def hop(self, reference: Reference, origin: Object, version: int = None) -> ObjectList:
+    def hop(self, reference: Reference | int | str, origin: Object, version: int = None) -> ObjectList:
         """Returns objects referenced to the origin objects by the give reference"""
-        
+        reference = self.parse_reference(reference)
+
         # Get current version
         if not version:
             self.cursor.execute('SELECT current_version FROM structure_reference_version WHERE reference_id = ? AND origin_object_id = ?', (reference.id, origin.id))

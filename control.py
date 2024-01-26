@@ -1,5 +1,6 @@
 from datetime import datetime
 from utils import remove_duplicates
+import pandas as pd
 
 class ObjectInterfaceControl:
     def __init__(self, interface) -> None:
@@ -178,11 +179,18 @@ class Object(ObjectInterfaceControl):
         """ Aktualisiert die übergebenen Attribute """
         self.interface.modify(self, **attributes)
 
-    def bind(self, reference: Reference, targets: list, rebind: bool = False):
+    def bind(self, reference: Reference | int | str, targets: list, rebind: bool = False):
         self.interface.bind(reference, self, targets, rebind)
 
-    def hop(self, reference: Reference, version: int = None):
+    def hop(self, reference: Reference | int | str, version: int = None):
         return self.interface.hop(reference, self, version)
+    
+    def hop_first(self, reference: Reference | int | str, version: int = None):
+        objects = self.hop(reference, version)
+        if len(objects) > 0:
+            return objects[0]
+        else:
+            return None
 
     def dump(self):
         """ Gibt String mit allen Objekteigenschaften zurück """
@@ -232,10 +240,17 @@ class ObjectList(ObjectInterfaceControl, list):
         super().__init__(interface)
         self.extend(objects)
 
-    def hop(self, reference: Reference):
+    def hop(self, reference: Reference | int | str):
         referenced_objects = []
         for object in self:
             referenced_objects.extend(self.interface.hop(reference, object))
         self.clear()
         self.extend(remove_duplicates(referenced_objects))
         return self
+    
+    def to_dataframe(self) -> pd.DataFrame:
+        def concat(d1: dict, d2: dict) -> dict:
+            d1.update(d2)
+            return d1
+        data = [concat({'id': obj.id}, {key: obj[key] for key in obj.get_attribute_names()}) for obj in self]
+        return pd.DataFrame.from_dict(data).set_index('id')

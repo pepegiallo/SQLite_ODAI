@@ -1,5 +1,5 @@
 #void {
-    TINYINT
+    NULL
 }
 #int {
     INTEGER
@@ -16,28 +16,31 @@
 #date {
     DATE,
     get {
-        return parse_sqlite_date(value)
+        if value:
+            return parse_sqlite_date(value)
+        else:
+            return None
     }
     set {
-        return date_to_string(value)
+        if value:
+            return date_to_string(value)
+        else:
+            return None
     }
 }
 #datetime {
     DATETIME,
     get {
-        return parse_sqlite_datetime(value)
+        if value:
+            return parse_sqlite_datetime(value)
+        else:
+            return None
     }
     set {
-        return datetime_to_string(value)
-    }
-}
-#array {
-    BLOB,
-    get {
-        return bytes_to_array(decompress(value))
-    }
-    set {
-        return compress(array_to_bytes(value))
+        if value:
+            return datetime_to_string(value)
+        else:
+            return None
     }
 }
 #zipcode {
@@ -46,10 +49,16 @@
 #currency2 {
     INTEGER,
     get {
-        return create_decimal(value, 2)
+        if value:
+            return create_decimal(value, 2)
+        else:
+            return None
     }
     set {
-        return get_decimal_base_value(value, 2)
+        if value:
+            return get_decimal_base_value(value, 2)
+        else:
+            return None
     }
 }
 +attributes {
@@ -89,10 +98,20 @@ Product {
 }
 OrderPosition {
     amount,
+    price {
+        get {
+            return this['amount'] * this.hop_first('position_to_product')['price']
+        }
+    },
     ~position_to_product -> Product
 }
 Order {
     creation_time,
+    price {
+        get {
+            return sum([position['price'] for position in this.hop('order_to_positions')])
+        }
+    },
     ~order_to_customer -> Customer,
     ~order_to_positions -> OrderPosition
 }
