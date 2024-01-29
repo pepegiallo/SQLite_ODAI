@@ -23,7 +23,7 @@ class ObjectInterface:
         self.cursor = self.connection.cursor()
 
     def setup(self):
-        with open('setup\init.sql', 'r') as file:
+        with open('setup/init.sql', 'r') as file:
             self.cursor.executescript(file.read())
         self.log('Setup')
         self.commit()

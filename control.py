@@ -215,6 +215,7 @@ class Object(ObjectInterfaceControl):
         self.__unprocessed_attributes__[attribute_name] = assignment.datatype_transform_read_value(self.raw_attributes[attribute_name])
     
     def get_value(self, attribute_name: str):
+        """ Gibt den transformierten Wert eines Attributs zurück """
         if attribute_name in self.raw_attributes.keys():
             if not attribute_name in self.__attributes__.keys():
                 self.calculate_value(attribute_name)
@@ -223,6 +224,7 @@ class Object(ObjectInterfaceControl):
             raise KeyError(f'Invalid attribute {attribute_name}')
         
     def get_unprocessed_value(self, attribute_name: str):
+        """ Gibt den nicht-transformierten Wert eines Attributs zurück """
         if attribute_name in self.raw_attributes.keys():
             if not attribute_name in self.__unprocessed_attributes__.keys():
                 self.calculate_unprocessed_value(attribute_name)
@@ -231,6 +233,7 @@ class Object(ObjectInterfaceControl):
             raise KeyError(f'Invalid attribute {attribute_name}')
         
     def get_raw_value(self, attribute_name: str):
+        """ Gibt den Datenbankwert eines Attributs zurück """
         if attribute_name in self.raw_attributes.keys():
             return self.raw_attributes[attribute_name]
         else:
@@ -249,9 +252,17 @@ class ObjectList(ObjectInterfaceControl, list):
         self.extend(remove_duplicates(referenced_objects))
         return self
     
-    def to_dataframe(self) -> pd.DataFrame:
+    def get_column(self, attribute_name: str) -> pd.Series:
+        return self.to_dataframe([attribute_name])[attribute_name]
+    
+    def filter(self, conditions):
+        indices = list(self.to_dataframe()[conditions])
+        return ObjectList(self.interface, [obj for obj in self if obj.id in indices])
+    
+    def to_dataframe(self, attribute_names: list = []):
+        """ Wandelt die enthaltenden Objekte mit den gegebenen oder allen Attributen in ein Dataframe um """
         def concat(d1: dict, d2: dict) -> dict:
             d1.update(d2)
             return d1
-        data = [concat({'id': obj.id}, {key: obj[key] for key in obj.get_attribute_names()}) for obj in self]
+        data = [concat({'id': obj.id}, {key: obj[key] for key in obj.get_attribute_names() if key in attribute_names or len(attribute_names) == 0}) for obj in self]
         return pd.DataFrame.from_dict(data).set_index('id')
