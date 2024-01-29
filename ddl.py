@@ -175,7 +175,18 @@ class Interpreter:
         """ Create new reference with the given ddl text at the given class """
         parameters = [p.strip() for p in text.split('->')]
         reference_name = parameters[0][1:]
-        self.interface.create_reference(reference_name, class_, self.interface.get_class(name=parameters[1]))
+        bracket_open = parameters[1].find('(')
+        bracket_close = parameters[1].find(')')
+        if bracket_open > 0 and bracket_close > 0:
+            if bracket_open < bracket_close:
+                target_class_name = parameters[1][:bracket_open]
+                cardinality = int(parameters[1][bracket_open + 1: bracket_close])
+            else:
+                raise SyntaxError(f'Incorrect reference definition ({parameters[0]})')
+        else:
+            target_class_name = parameters[1]
+            cardinality = None
+        self.interface.create_reference(reference_name, class_, self.interface.get_class(name=target_class_name), cardinality)
 
     def __run_attribute_assignment__(self, text: str, class_):
         """ Assigns an existing attribute by the given ddl text to the given class """

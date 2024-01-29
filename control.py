@@ -139,12 +139,13 @@ class AttributeAssignment(ObjectInterfaceControl):
 
 
 class Reference(ObjectInterfaceControl):
-    def __init__(self, interface, id: str, name: str, origin_class_id: str, target_class_id: str) -> None:
+    def __init__(self, interface, id: str, name: str, origin_class_id: str, target_class_id: str, cardinality: int) -> None:
         super().__init__(interface)
         self.id = id
         self.name = name
         self.origin_class_id = origin_class_id
         self.target_class_id = target_class_id
+        self.cardinality = cardinality
         interface.structure_cache.store_reference(self)
 
     def get_origin_class(self):

@@ -199,14 +199,14 @@ class ObjectInterface:
     #endregion
 
     #region Reference
-    def create_reference(self, name: str, origin_class: Class | int | str, target_class: Class | int | str):
+    def create_reference(self, name: str, origin_class: Class | int | str, target_class: Class | int | str, cardinality: int = None):
         """Creates a new reference between two classes and returns Reference object"""
         origin_class = self.parse_class(origin_class)
         target_class = self.parse_class(target_class)
-        self.cursor.execute("INSERT INTO structure_reference (name, origin_class_id, target_class_id) VALUES (?, ?, ?)", (name, origin_class.id, target_class.id))
+        self.cursor.execute("INSERT INTO structure_reference (name, origin_class_id, target_class_id, cardinality) VALUES (?, ?, ?, ?)", (name, origin_class.id, target_class.id, cardinality))
         self.cursor.execute(f"CREATE TABLE {get_reference_table_name(name)} (origin_id INTEGER REFERENCES data_meta(id), target_id INTEGER REFERENCES data_meta(id), version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(origin_id, target_id, version))")
         logging.debug(f'Created new reference {name} between class {origin_class.name} and {target_class.name}')
-        return Reference(self, self.cursor.lastrowid, name, origin_class, target_class)
+        return Reference(self, self.cursor.lastrowid, name, origin_class, target_class, cardinality)
 
     def get_reference_from_db(self, id: int = None, name: str = None):
         """Reads a reference from the database by its ID or name and returns a Reference object"""
@@ -214,7 +214,7 @@ class ObjectInterface:
         self.cursor.execute(f"SELECT * FROM structure_reference WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
-            return Reference(self, res['id'], res['name'], res['origin_class_id'], res['target_class_id'])
+            return Reference(self, res['id'], res['name'], res['origin_class_id'], res['target_class_id'], res['cardinality'])
         else:
             raise KeyError(f'Reference {parameters[0]} not found')
         
@@ -314,6 +314,15 @@ class ObjectInterface:
     def bind(self, reference: Reference | int | str, origin: Object, targets: list, rebind: bool = False):
         """Binds two objects using the given reference"""
         reference = self.parse_reference(reference)
+
+        # Check cardinality
+        if reference.cardinality is not None:
+            if reference.cardinality < len(targets):
+                raise ValueError(f'{len(targets)} objects can not be linked via reference with cardinality {reference.cardinality}.')
+            elif rebind == False:
+                current_bound_objects = len(origin.hop(reference))
+                if reference.cardinality < len(targets) + current_bound_objects:
+                    raise ValueError(f'{current_bound_objects} objects are already linked via reference. {len(targets)} others can not be linked with cardinality {reference.cardinality}. Use a rebind instead.')
 
         # Get current and next version number
         self.cursor.execute('INSERT OR IGNORE INTO structure_reference_version (reference_id, origin_object_id) VALUES (?, ?)', (reference.id, origin.id))

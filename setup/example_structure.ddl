@@ -61,6 +61,15 @@
             return None
     }
 }
+#array {
+    BLOB,
+    get {
+        return bytes_to_array(decompress(value))
+    }
+    set {
+        return compress(array_to_bytes(value))
+    }
+}
 +attributes {
     first_name: shorttext,
     last_name: shorttext,
@@ -103,7 +112,7 @@ OrderPosition {
             return this['amount'] * this.hop_first('position_to_product')['price']
         }
     },
-    ~position_to_product -> Product
+    ~position_to_product -> Product(1)
 }
 Order {
     creation_time,
@@ -112,6 +121,6 @@ Order {
             return sum([position['price'] for position in this.hop('order_to_positions')])
         }
     },
-    ~order_to_customer -> Customer,
+    ~order_to_customer -> Customer(1),
     ~order_to_positions -> OrderPosition
 }

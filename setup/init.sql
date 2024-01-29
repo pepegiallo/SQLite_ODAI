@@ -47,7 +47,8 @@ CREATE TABLE structure_reference (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     origin_class_id INTEGER REFERENCES structure_class(id),
-    target_class_id INTEGER REFERENCES structure_class(id)
+    target_class_id INTEGER REFERENCES structure_class(id),
+    cardinality UNSIGNED INTEGER
 );
 CREATE INDEX reference_name ON structure_reference(name);
 
