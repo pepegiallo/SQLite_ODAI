@@ -239,30 +239,61 @@ class Object(ObjectInterfaceControl):
         else:
             raise KeyError(f'Invalid attribute {attribute_name}')
         
-class ObjectList(ObjectInterfaceControl, list):
-    def __init__(self, interface, objects: list):
+class ObjectList(ObjectInterfaceControl):
+    def __init__(self, interface, objects: list = []):
         super().__init__(interface)
-        self.extend(objects)
+        self.objects = objects
+        self.modified = True
+        self.__dataframe__ = None
+
+    def __len__(self):
+        return len(self.objects)
+    
+    def __iter__(self):
+        return iter(self.objects)
+    
+    def __getitem__(self, index: int):
+        return self.objects[index]
+
+    def append(self, object_: Object):
+        self.objects.append(object_)
+        self.modified = True
+
+    def extend(self, objects: list):
+        self.objects.extend(objects)
+        self.modified = True
+
+    def clear(self):
+        self.objects.clear()
+        self.modified = True
+
+    def __update__dataframe__(self):
+        """ Wandelt die enthaltenden Objekte mit den gegebenen oder allen Attributen in ein Dataframe um """
+        if len(self) > 0:
+            data = [{'id': obj.id} | {key: obj[key] for key in obj.get_attribute_names()} for obj in self]
+            self.__dataframe__ = pd.DataFrame.from_dict(data).set_index('id')
+        else:
+            self.__dataframe__ = pd.DataFrame({'id': []}).set_index('id')
+        self.modified = False
 
     def hop(self, reference: Reference | int | str):
         referenced_objects = []
         for object in self:
             referenced_objects.extend(self.interface.hop(reference, object))
         self.clear()
-        self.extend(remove_duplicates(referenced_objects))
-        return self
+        return ObjectList(self.interface, remove_duplicates(referenced_objects))
     
     def get_column(self, attribute_name: str) -> pd.Series:
-        return self.to_dataframe([attribute_name])[attribute_name]
+        return self.get_dataframe([attribute_name])[attribute_name]
     
     def filter(self, conditions):
-        indices = list(self.to_dataframe()[conditions])
+        indices = list(self.to_dataframe()[conditions].index)
         return ObjectList(self.interface, [obj for obj in self if obj.id in indices])
     
-    def to_dataframe(self, attribute_names: list = []):
-        """ Wandelt die enthaltenden Objekte mit den gegebenen oder allen Attributen in ein Dataframe um """
-        def concat(d1: dict, d2: dict) -> dict:
-            d1.update(d2)
-            return d1
-        data = [concat({'id': obj.id}, {key: obj[key] for key in obj.get_attribute_names() if key in attribute_names or len(attribute_names) == 0}) for obj in self]
-        return pd.DataFrame.from_dict(data).set_index('id')
+    def get_dataframe(self, attribute_names: list = []):
+        if self.modified:
+            self.__update__dataframe__()
+        if len(attribute_names) > 0:
+            return self.__dataframe__[attribute_names]
+        else:
+            return self.__dataframe__
