@@ -3,6 +3,8 @@ from decimal import Decimal
 import math
 import numpy as np
 from io import BytesIO
+from functools import wraps
+from time import time
 
 def get_data_table_name(class_name: str) -> str:
     return f"data_{class_name}"
@@ -13,11 +15,11 @@ def get_reference_table_name(reference_name: str) -> str:
 def get_index_name(table_name: str, column_name: str) -> str:
     return f"idx_{table_name}_{column_name}"
 
-def create_condition(id: int = None, name: str = None):
-    if id:
-        return 'id = ?', (id,)
-    elif name:
-        return 'name = ?', (name,)
+def create_condition(key: int | str):
+    if isinstance(key, int):
+        return 'id = ?', (key,)
+    elif isinstance(key, str):
+        return 'name = ?', (key,)
     else:
         raise KeyError('Id or name required')
     
@@ -50,6 +52,14 @@ def remove_duplicates(objects: list):
             unique_ids.add(obj.id)
             unique_objects.append(obj)
     return unique_objects
+
+def measure_runtime(func):
+    @wraps(func)
+    def wrapper_func(*args, **kwargs):
+        start_time = time()
+        func(*args, **kwargs)
+        print(f'Execution lasted {time() - start_time:.2f} seconds')
+    return wrapper_func
 
 def parse_sqlite_date(str_date: str) -> datetime:
     return datetime.strptime(str_date, r'%Y-%m-%d').date()

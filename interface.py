@@ -1,9 +1,9 @@
 import sqlite3
 import logging
-from cache import StructureCache
-from control import Datatype, Class, Attribute, AttributeAssignment, Reference, Object, ObjectList
+from control import ObjectInterfaceControl, Datatype, Class, Attribute, AttributeAssignment, Reference, Object, ObjectList
 from utils import get_data_table_name, get_reference_table_name, get_index_name, create_condition, print_table
 from programmability.handler import ExecutionHandler
+from functools import cached_property, cache
 
 VERSION = '0.1'
 
@@ -12,10 +12,10 @@ class ObjectInterface:
     #region General
     def __init__(self, filename):
         self.filename = filename
-        self.structure_cache = StructureCache()
         self.execution_handler = ExecutionHandler(self)
         self.connection = None
         self.cursor = None
+        self.__controls__ = []
 
     def connect(self):
         self.connection = sqlite3.connect(self.filename)
@@ -29,7 +29,21 @@ class ObjectInterface:
         self.commit()
         logging.debug('Setup successful')
 
-    def get_version(self):
+    def register_control(self, control: ObjectInterfaceControl):
+        self.__controls__.append(control)
+
+    def clear_cache(self):
+        self.get_datatype.cache_clear()
+        self.get_class.cache_clear()
+        self.get_child_classes.cache_clear()
+        self.get_attribute_assignments.cache_clear()
+        self.get_attribute.cache_clear()
+        self.get_reference.cache_clear()
+        for control in self.__controls__:
+            control.clear_cache()
+
+    @cached_property
+    def version(self):
         self.cursor.execute('SELECT version FROM info ORDER BY time DESC LIMIT 1')
         row = self.cursor.fetchone()
         return row['version']
@@ -60,45 +74,29 @@ class ObjectInterface:
         """Convert given value to Datatype object"""
         if isinstance(value, Datatype):
             return value
-        elif isinstance(value, int):
-            return self.get_datatype(id=value)
-        elif isinstance(value, str):
-            return self.get_datatype(name=value)
         else:
-            raise TypeError(f'Type {type(value)} cannot be converted to Datatype object.')
+            return self.get_datatype(value)
         
     def parse_class(self, value: Class | int | str) -> Class:
         """Convert given value to Class object"""
         if isinstance(value, Class):
             return value
-        elif isinstance(value, int):
-            return self.get_class(id=value)
-        elif isinstance(value, str):
-            return self.get_class(name=value)
         else:
-            raise TypeError(f'Type {type(value)} cannot be converted to Class object.')
+            return self.get_class(value)
         
     def parse_attribute(self, value: Attribute | int | str) -> Attribute:
         """Convert given value to Attribute object"""
         if isinstance(value, Attribute):
             return value
-        elif isinstance(value, int):
-            return self.get_attribute(id=value)
-        elif isinstance(value, str):
-            return self.get_attribute(name=value)
         else:
-            raise TypeError(f'Type {type(value)} cannot be converted to Attribute object.')
+            return self.get_attribute(value)
         
     def parse_reference(self, value: Reference | int | str) -> Reference:
         """Convert given value to Reference object"""
         if isinstance(value, Reference):
             return value
-        elif isinstance(value, int):
-            return self.get_reference(id=value)
-        elif isinstance(value, str):
-            return self.get_reference(name=value)
         else:
-            raise TypeError(f'Type {type(value)} cannot be converted to Reference object.')
+            return self.get_reference(value)
     #endregion
 
     #region Datatype
@@ -108,20 +106,16 @@ class ObjectInterface:
         logging.debug(f"Created datatype {name} ({generator}, {'read transformer' if read_transformer_source else 'no read transformer'}, {'write transformer' if write_transformer_source else 'no write transformer'})")
         return Datatype(self, self.cursor.lastrowid, name, generator, read_transformer_source, write_transformer_source)
     
-    def get_datatype_from_db(self, id: int = None, name: str = None) -> Datatype:
+    @cache
+    def get_datatype(self, key: int | str) -> Datatype:
         """Reads a datatype from the database by its ID or name and returns a Datatype object"""
-        condition, parameters = create_condition(id, name)
+        condition, parameters = create_condition(key)
         self.cursor.execute(f"SELECT * FROM structure_datatype WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
             return Datatype(self, res['id'], res['name'], res['generator'], res['read_transformer_source'], res['write_transformer_source'])
         else:
             raise KeyError(f'Datatype {parameters[0]} not found')
-        
-    def get_datatype(self, id: int = None, name: str = None) -> Datatype:
-        """Reads a datatype from the database or cache if exists and returns a Datatype object"""
-        cached_datatype = self.structure_cache.get_datatype(id=id, name=name)
-        return cached_datatype if cached_datatype else self.get_datatype_from_db(id, name)
     #endregion
 
     #region Class
@@ -135,20 +129,16 @@ class ObjectInterface:
         logging.debug(f"Created new class {name}{f' as subclass of {parent.name}' if parent else ''}")
         return Class(self, self.cursor.lastrowid, name, parent.id if parent else None)
     
-    def get_class_from_db(self, id: int = None, name: str = None):
+    @cache
+    def get_class(self, key: int | str):
         """Reads a class from the database by its ID or name and returns a Class object"""
-        condition, parameters = create_condition(id, name)
+        condition, parameters = create_condition(key)
         self.cursor.execute(f"SELECT * FROM structure_class WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
             return Class(self, res['id'], res['name'], res['parent_id'])
         else:
             raise KeyError(f'Class {parameters[0]} not found')
-        
-    def get_class(self, id: int = None, name: str = None):
-        """Reads a class from the database or cache if exists and returns a Class object"""
-        cached_class = self.structure_cache.get_class(id=id, name=name)
-        return cached_class if cached_class else self.get_class_from_db(id, name)
     
     def assign_attribute_to_class(self, class_: Class | int | str, attribute: Attribute | int | str, indexed: bool = False, read_transformer_source: str = None, write_transformer_source: str = None) -> AttributeAssignment:
         """Assigns given attribute to given class and return AttributeAssignment object"""
@@ -161,13 +151,15 @@ class ObjectInterface:
         logging.debug(f'Assigned {attribute.name} to {class_.name}')
         return AttributeAssignment(self, class_.id, attribute.id, indexed, read_transformer_source, write_transformer_source)
     
+    @cache
     def get_child_classes(self, class_: Class | int | str):
         """Returns the classes that have the given class as parent"""
         class_ = self.parse_class(class_)
         self.cursor.execute("SELECT id FROM structure_class WHERE parent_id = ?", (class_.id,))
-        return [self.get_class(id=row['id']) for row in self.cursor.fetchall()]
+        return [self.get_class(row['id']) for row in self.cursor.fetchall()]
     
-    def get_attribute_assignments_from_db(self, class_: Class | int | str) -> list:
+    @cache
+    def get_attribute_assignments(self, class_: Class | int | str) -> list:
         """Retrieves attributes assigned to a class from the database"""
         class_ = self.parse_class(class_)
         self.cursor.execute("SELECT * FROM structure_attribute_assignment WHERE class_id = ?", (class_.id,))
@@ -182,20 +174,16 @@ class ObjectInterface:
         logging.debug(f'Created new attribute {name}')
         return Attribute(self, self.cursor.lastrowid, name, datatype.id)
 
-    def get_attribute_from_db(self, id: int = None, name: str = None):
+    @cache
+    def get_attribute(self, key: int | str):
         """Reads an attribute from the database by its ID or name and returns an Attribute object"""
-        condition, parameters = create_condition(id, name)
+        condition, parameters = create_condition(key)
         self.cursor.execute(f"SELECT * FROM structure_attribute WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
             return Attribute(self, res['id'], res['name'], res['datatype_id'])
         else:
             raise KeyError(f'Attribute {parameters[0]} not found')
-
-    def get_attribute(self, id: int = None, name: str = None):
-        """Reads an attribute from the database or cache if exists and returns an Attribute object"""
-        cached_attribute = self.structure_cache.get_attribute(id=id, name=name)
-        return cached_attribute if cached_attribute else self.get_attribute_from_db(id, name)
     #endregion
 
     #region Reference
@@ -208,20 +196,16 @@ class ObjectInterface:
         logging.debug(f'Created new reference {name} between class {origin_class.name} and {target_class.name}')
         return Reference(self, self.cursor.lastrowid, name, origin_class, target_class, cardinality)
 
-    def get_reference_from_db(self, id: int = None, name: str = None):
+    @cache
+    def get_reference(self, key: int | str):
         """Reads a reference from the database by its ID or name and returns a Reference object"""
-        condition, parameters = create_condition(id, name)
+        condition, parameters = create_condition(key)
         self.cursor.execute(f"SELECT * FROM structure_reference WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
             return Reference(self, res['id'], res['name'], res['origin_class_id'], res['target_class_id'], res['cardinality'])
         else:
             raise KeyError(f'Reference {parameters[0]} not found')
-        
-    def get_reference(self, id: int = None, name: str = None):
-        """Reads a reference from the database or cache if exists and returns a Reference object"""
-        cached_reference = self.structure_cache.get_reference(id=id, name=name)
-        return cached_reference if cached_reference else self.get_reference_from_db(id, name)
     #endregion
     
     #region Object
@@ -305,7 +289,7 @@ class ObjectInterface:
             return None
         
         # Get objects class
-        class_ = self.get_class(id=meta['class_id'])
+        class_ = self.get_class(meta['class_id'])
 
         # Get attributes
         self.cursor.execute(f"{self.__get_class_view_sql__(class_)} AND data_meta.id = ?", (id,))

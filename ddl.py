@@ -115,7 +115,7 @@ class Interpreter:
         """ Run attribute creation with the given ddl text """
         for a in [a.strip() for a in text.split(',')]:
             parameters = [p.strip() for p in a.split(':')]
-            self.interface.create_attribute(parameters[0], self.interface.get_datatype(name=parameters[1]))
+            self.interface.create_attribute(parameters[0], self.interface.get_datatype(parameters[1]))
 
     def __run_class_creation__(self, class_text: str, content_text: str):
             bracket_open = class_text.find('(')
@@ -124,7 +124,7 @@ class Interpreter:
             # Mit Parent
             if bracket_open > 0 and bracket_close > 0 and bracket_open < bracket_close:
                 class_name = class_text[0: bracket_open]
-                parent = self.interface.get_class(name=class_text[bracket_open + 1: bracket_close])
+                parent = self.interface.get_class(class_text[bracket_open + 1: bracket_close])
 
             # Ohne Parent
             else:
@@ -186,7 +186,7 @@ class Interpreter:
         else:
             target_class_name = parameters[1]
             cardinality = None
-        self.interface.create_reference(reference_name, class_, self.interface.get_class(name=target_class_name), cardinality)
+        self.interface.create_reference(reference_name, class_, self.interface.get_class(target_class_name), cardinality)
 
     def __run_attribute_assignment__(self, text: str, class_):
         """ Assigns an existing attribute by the given ddl text to the given class """
@@ -223,4 +223,4 @@ class Interpreter:
         # Attribut zuweisen
         attribute_name = attribute_text.replace('*', '')
         indexed = len(attribute_text) > len(attribute_name)
-        self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(name=attribute_name), indexed, read_transformer_source, write_transformer_source)
+        self.interface.assign_attribute_to_class(class_, self.interface.get_attribute(attribute_name), indexed, read_transformer_source, write_transformer_source)
