@@ -278,7 +278,6 @@ class ObjectList(ObjectInterfaceControl):
         referenced_objects = []
         for object in self:
             referenced_objects.extend(self.interface.hop(reference, object))
-        self.clear()
         return ObjectList(self.interface, remove_duplicates(referenced_objects))
     
     def get_column(self, attribute_name: str) -> pd.Series:
