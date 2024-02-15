@@ -64,10 +64,28 @@
 #array {
     BLOB,
     get {
-        return bytes_to_array(decompress(value))
+        return bytes_to_array(value)
     }
     set {
-        return compress(array_to_bytes(value))
+        return array_to_bytes(value)
+    }
+}
+#cbytes {
+    BLOB,
+    get {
+        return decompress(value)
+    }
+    set {
+        return compress(value)
+    }
+}
+#cstring {
+    #cbytes,
+    get {
+        return value.decode('utf-8')
+    }
+    set {
+        return value.encode('utf-8')
     }
 }
 +attributes {
@@ -83,7 +101,8 @@
     creation_time: datetime,
     name: longtext,
     amount: int,
-    birthday: date
+    birthday: date,
+    example_text: cstring
 }
 Person {
     first_name,
@@ -123,4 +142,7 @@ Order {
     },
     ~order_to_customer -> Customer(1),
     ~order_to_positions -> OrderPosition
+}
+TextObject {
+    example_text
 }

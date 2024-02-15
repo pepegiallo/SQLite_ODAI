@@ -10,9 +10,10 @@ CREATE TABLE info (
 CREATE TABLE structure_datatype (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
-    generator TEXT NOT NULL,
     read_transformer_source TEXT,
-    write_transformer_source TEXT
+    write_transformer_source TEXT,
+    generator TEXT,
+    parent_id INTEGER REFERENCES structure_class(id)
 );
 CREATE INDEX datatype_name ON structure_datatype(name);
 

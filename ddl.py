@@ -74,21 +74,27 @@ class Interpreter:
     def __run_datatype_creation__(self, datatype_name, text: str):
         """ Creates new datatype with the given name and ddl text """
         start = 0
+        indicator = None
         generator = None
+        parent_name = None
         read_transformer_source = None
         write_transformer_source = None
         valid = True
         while valid:
 
-            # Generator
-            if not generator:
+            # Generator / Parent
+            if not (generator or parent_name):
                 first_comma = text.find(',', start)
                 if first_comma > 0:
-                    generator = text[start: first_comma].strip()
+                    indicator = text[start: first_comma].strip()
                     start = first_comma + 1
                 else:
-                    generator = text.strip()
+                    indicator = text.strip()
                     valid = False
+                if indicator.startswith('#'):
+                    parent_name = indicator[1:]
+                else:
+                    generator = indicator
 
             # Transformer Funktionen
             else:
@@ -107,7 +113,15 @@ class Interpreter:
                 else:
                     valid = False
         if generator:
-            self.interface.create_datatype(datatype_name, generator, read_transformer_source, write_transformer_source)
+            self.interface.create_datatype(datatype_name, 
+                                           read_transformer_source=read_transformer_source, 
+                                           write_transformer_source=write_transformer_source, 
+                                           generator=generator)
+        elif parent_name:
+            self.interface.create_datatype(datatype_name, 
+                                           read_transformer_source=read_transformer_source, 
+                                           write_transformer_source=write_transformer_source, 
+                                           parent=self.interface.get_datatype(parent_name))
         else:
             raise SyntaxError('Incorrect datatype definition')
 

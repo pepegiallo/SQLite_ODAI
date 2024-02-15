@@ -11,19 +11,52 @@ class ObjectInterfaceControl:
         pass
 
 class Datatype(ObjectInterfaceControl):
-    def __init__(self, interface, id: int, name: str, generator: str, read_transformer_source: str, write_transformer_source: str) -> None:
+    def __init__(self, interface, id: int, name: str, read_transformer_source: str, write_transformer_source: str, generator: str, parent_id: int) -> None:
         super().__init__(interface)
         self.id = id
         self.name = name
-        self.generator = generator
+        self.__generator__ = generator
+        self.parent_id = parent_id
 
         # Transformfunktionen
         self.read_transformer_source = read_transformer_source
-        self.transform_read_value = interface.execution_handler.generate_transformer(read_transformer_source, parameters=['value'])
+        self.__transform_read_value__ = interface.execution_handler.generate_transformer(read_transformer_source, parameters=['value'])
         self.write_transformer_source = write_transformer_source
-        self.transform_write_value = interface.execution_handler.generate_transformer(write_transformer_source, parameters=['value'])
+        self.__transform_write_value__ = interface.execution_handler.generate_transformer(write_transformer_source, parameters=['value'])
 
         self.interface.register_control(self)
+
+    def get_generator(self):
+        """ Gibt den Generator des Datentyps zurück """
+        if self.is_root():
+            return self.__generator__
+        else:
+            return self.get_parent().get_generator()
+
+    def is_root(self):
+        """ Gibt zurück, ob der Datentyp ein Ursprungstyp ist (keine Vorfahren hat) """
+        return self.parent_id is None
+
+    def transform_read_value(self, value):
+        """ Transformiert den gegebenen Wert mithilfe der Lesen-Umwandlungsfunktion des Datentyps """
+        if self.is_root():
+            return self.__transform_read_value__(value)
+        else:
+            return self.__transform_read_value__(self.get_parent().transform_read_value(value))
+        
+    def transform_write_value(self, value):
+        """ Transformiert den gegebenen Wert mithilfe der Schreiben-Umwandlungsfunktion des Datentyps"""
+        if self.is_root():
+            return self.__transform_write_value__(value)
+        else:
+            return self.get_parent().transform_write_value(self.__transform_write_value__(value))
+
+    def get_parent(self):
+        """ Gibt Datentypobjekt des Parent-Datentypen zurück """
+        if self.parent_id is not None:
+            return self.interface.get_datatype(self.parent_id)
+        else:
+            return None
 
 
 class Class(ObjectInterfaceControl):

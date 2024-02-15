@@ -8,7 +8,7 @@ import examples.randomdata as rd
 import random
 
 FILENAME_DATABASE = 'data/database.db'
-FILENAME_STRUCTURE = 'setup\example_structure.ddl'
+FILENAME_STRUCTURE = 'setup/example_structure.ddl'
 
 def get_db_connection():
     connection = sqlite3.connect(FILENAME_DATABASE)

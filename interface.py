@@ -100,11 +100,11 @@ class ObjectInterface:
     #endregion
 
     #region Datatype
-    def create_datatype(self, name: str, generator: str, read_transformer_source: str = None, write_transformer_source: str = None) -> Datatype:
+    def create_datatype(self, name: str, read_transformer_source: str = None, write_transformer_source: str = None, generator: str = None, parent: Datatype = None) -> Datatype:
         """Creates new datatype and returns Datatype object"""
-        self.cursor.execute("INSERT INTO structure_datatype (name, generator, read_transformer_source, write_transformer_source) VALUES (?, ?, ?, ?)", (name, generator, read_transformer_source, write_transformer_source))
-        logging.debug(f"Created datatype {name} ({generator}, {'read transformer' if read_transformer_source else 'no read transformer'}, {'write transformer' if write_transformer_source else 'no write transformer'})")
-        return Datatype(self, self.cursor.lastrowid, name, generator, read_transformer_source, write_transformer_source)
+        self.cursor.execute("INSERT INTO structure_datatype (name, read_transformer_source, write_transformer_source, generator, parent_id) VALUES (?, ?, ?, ?, ?)", (name, read_transformer_source, write_transformer_source, generator, parent.id if parent else None))
+        logging.debug(f"Created datatype {name} ({generator if generator else f'Inherits from {parent.name}'}, {'read transformer' if read_transformer_source else 'no read transformer'}, {'write transformer' if write_transformer_source else 'no write transformer'})")
+        return Datatype(self, self.cursor.lastrowid, name, read_transformer_source, write_transformer_source, generator, parent.id if parent else None)
     
     @cache
     def get_datatype(self, key: int | str) -> Datatype:
@@ -113,7 +113,7 @@ class ObjectInterface:
         self.cursor.execute(f"SELECT * FROM structure_datatype WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
-            return Datatype(self, res['id'], res['name'], res['generator'], res['read_transformer_source'], res['write_transformer_source'])
+            return Datatype(self, res['id'], res['name'], res['read_transformer_source'], res['write_transformer_source'], res['generator'], res['parent_id'])
         else:
             raise KeyError(f'Datatype {parameters[0]} not found')
     #endregion
@@ -144,7 +144,7 @@ class ObjectInterface:
         """Assigns given attribute to given class and return AttributeAssignment object"""
         class_ = self.parse_class(class_)
         attribute = self.parse_attribute(attribute)
-        self.cursor.execute(f"ALTER TABLE {get_data_table_name(class_.name)} ADD COLUMN {attribute.name} {attribute.get_datatype().generator}")
+        self.cursor.execute(f"ALTER TABLE {get_data_table_name(class_.name)} ADD COLUMN {attribute.name} {attribute.get_datatype().get_generator()}")
         if indexed:
             self.cursor.execute(f"CREATE INDEX {get_index_name(class_.name, attribute.name)} ON {get_data_table_name(class_.name)}({attribute.name})")
         self.cursor.execute("INSERT INTO structure_attribute_assignment (class_id, attribute_id, indexed, read_transformer_source, write_transformer_source) VALUES (?, ?, ?, ?, ?)", (class_.id, attribute.id, indexed, read_transformer_source, write_transformer_source))
