@@ -213,7 +213,7 @@ class ObjectInterface:
         class_ = self.parse_class(class_)
         self.cursor.execute("INSERT INTO data_meta (class_id) VALUES (?) RETURNING id, status, created", (class_.id,))
         meta = self.cursor.fetchone()
-        return Object(self, meta['id'], class_, meta['status'], meta['created'], **{a.name: None for a in class_.get_total_assigned_attributes()})
+        return Object(self, meta['id'], class_, meta['status'], meta['created'], **{a.name: None for a in class_.get_assigned_attributes(True)})
 
     def __set_object_status__(self, object_: Object, status: int):
         """Sets the status of the given object"""
@@ -369,6 +369,26 @@ class ObjectInterface:
             return self.create_object_list([object_ for object_ in objects if object_.is_active()])
         else:
             return self.create_object_list(objects)
+        
+    def get_instances(self, class_: Class | int | str, recursive: bool = False, only_active_objects: bool = True) -> ObjectList:
+        """Returns all objects of the given class"""
+        class_ = self.parse_class(class_)
+        
+        # Get sql
+        status_condition = '' if only_active_objects else f' AND status = {STATUS_ACTIVE}'
+        if recursive:
+            parameters = [class_.id, *[c.id for c in class_.get_children(True)]]
+            sql = f"SELECT id FROM data_meta WHERE class_id IN ({', '.join(['?'] * len(parameters))}){status_condition}"
+        else:
+            sql = f"SELECT id FROM data_meta WHERE class_id = ?{status_condition}"
+            parameters = [class_.id]
+        
+        # Get object ids
+        self.cursor.execute(sql, parameters)
+        object_ids = [row['id'] for row in self.cursor.fetchall()]
+
+        # Return object list
+        return self.create_object_list([self.get_object(id) for id in object_ids])
     #endregion
 
     def create_object_list(self, objects: list = []) -> ObjectList:

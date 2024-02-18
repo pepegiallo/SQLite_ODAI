@@ -71,8 +71,8 @@ class Class(ObjectInterfaceControl):
     def clear_cache(self):
         super().clear_cache()
         self.get_family_tree.cache_clear()
-        self.get_total_children.cache_clear()
-        self.get_total_attribute_assignments.cache_clear()
+        self.get_children.cache_clear()
+        self.get_attribute_assignments.cache_clear()
         self.get_attribute_assignment.cache_clear()
 
     def get_parent(self):
@@ -92,47 +92,41 @@ class Class(ObjectInterfaceControl):
           family_tree.append(self)
           return family_tree
     
-    def get_children(self) -> list:
-        """ Gibt die untergeordneten Klassen zurück """
-        return self.interface.get_child_classes(self)
-    
     @cache
-    def get_total_children(self) -> list:
-        """ Gibt die untergeordneten Klassen rekursiv zurück """
-        total_children = []
-        for child in self.get_children():
-            total_children.append(child)
-            total_children.extend(child.get_total_children())
-        return total_children
-    
-    def get_attribute_assignments(self):
+    def get_children(self, recursive: bool = False) -> list:
+        """ Gibt die untergeordneten Klassen zurück """
+        if recursive:
+            children = []
+            for child in self.get_children():
+                children.append(child)
+                children.extend(child.get_children(True))
+            return children
+        else:
+            return self.interface.get_child_classes(self)
+        
+    @cache
+    def get_attribute_assignments(self, recursive: bool = False):
         """ Gibt die Attributzuweisungen der Klasse zurück """
-        return self.interface.get_attribute_assignments(self)
+        if recursive:
+            attribute_assignments = []
+            for class_ in self.get_family_tree():
+                attribute_assignments.extend(class_.get_attribute_assignments())
+            return attribute_assignments
+        else:
+            return self.interface.get_attribute_assignments(self)
 
-    def get_assigned_attributes(self):
+    def get_assigned_attributes(self, recursive: bool = False):
         """ Gibt die der Klasse direkt zugewiesenen Attribute zurück """
-        return [assignment.get_attribute() for assignment in self.get_attribute_assignments()]
+        return [assignment.get_attribute() for assignment in self.get_attribute_assignments(recursive)]
 
     def is_root(self):
         """ Gibt zurück, ob die Klasse eine Ursprungsklasse ist (keine Vorfahren hat) """
         return self.parent_id is None
 
     @cache
-    def get_total_attribute_assignments(self) -> dict:
-        """ Gibt die Liste der AttributeAssignments aller der Klasse zugeordneten Objekte (selbst und übergeordnet) zurück """
-        total_attribute_assignments = []
-        for class_ in self.get_family_tree():
-            total_attribute_assignments.extend(class_.get_attribute_assignments())
-        return total_attribute_assignments
-    
-    def get_total_assigned_attributes(self) -> list:
-        """ Gibt die Liste der Attribute aller der Klasse zugeordneten Objekte (selbst und übergeordnet) zurück """
-        return [assignment.get_attribute() for assignment in self.get_total_attribute_assignments()]
-
-    @cache
     def get_attribute_assignment(self, attribute_name: str):
         """ Gibt die Attributzuweisung aller bei der Klasse erlaubten Attribute anhand des gegeben Attributnamens zurück """
-        for aa in self.get_total_attribute_assignments():
+        for aa in self.get_attribute_assignments(True):
             if aa.get_attribute().name == attribute_name:
                 return aa
         return None

@@ -21,13 +21,13 @@ def show_class(class_id: int):
 
         # Klasse und alle Children ermitteln
         class_ = interface.get_class(id=class_id)
-        valid_classes = [class_, *class_.get_total_children()]
+        valid_classes = [class_, *class_.get_children(True)]
 
         # Attribute ermitteln
-        total_attributes = [aa.get_attribute() for aa in class_.get_total_attribute_assignments()]
+        all_attributes = [aa.get_attribute() for aa in class_.get_attribute_assignments(True)]
         class_attributes = [aa.get_attribute() for aa in class_.get_attribute_assignments()]
-        inherited_attributes = [ta for ta in total_attributes if ta.id not in [ca.id for ca in class_attributes]]
-        displayed_attribute_names = [ta.name for ta in total_attributes]
+        inherited_attributes = [ta for ta in all_attributes if ta.id not in [ca.id for ca in class_attributes]]
+        displayed_attribute_names = [ta.name for ta in all_attributes]
 
         # Objekte ermitteln
         interface.cursor.execute(f"SELECT id FROM data_meta WHERE class_id IN ({', '.join([str(c.id) for c in valid_classes])})")
