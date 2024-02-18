@@ -65,6 +65,7 @@ CREATE TABLE structure_reference_version (
 CREATE TABLE data_meta (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     class_id INTEGER REFERENCES structure_class(id),
+    status INTEGER REFERENCES utils_status(id) DEFAULT {STATUS_IN_CREATION},
     created DATETIME DEFAULT CURRENT_TIMESTAMP,
     current_version INTEGER DEFAULT 0
 );

@@ -1,7 +1,8 @@
 from datetime import datetime
 from utils import remove_duplicates
 import pandas as pd
-from functools import cache, cached_property
+from functools import cache
+from constant import STATUS_ACTIVE
 
 class ObjectInterfaceControl:
     def __init__(self, interface) -> None:
@@ -123,6 +124,10 @@ class Class(ObjectInterfaceControl):
         for class_ in self.get_family_tree():
             total_attribute_assignments.extend(class_.get_attribute_assignments())
         return total_attribute_assignments
+    
+    def get_total_assigned_attributes(self) -> list:
+        """ Gibt die Liste der Attribute aller der Klasse zugeordneten Objekte (selbst und übergeordnet) zurück """
+        return [assignment.get_attribute() for assignment in self.get_total_attribute_assignments()]
 
     @cache
     def get_attribute_assignment(self, attribute_name: str):
@@ -195,10 +200,11 @@ class Reference(ObjectInterfaceControl):
         return self.interface.get_class(self.target_class_id)
 
 class Object(ObjectInterfaceControl):
-    def __init__(self, interface, id: str, class_: Class, created: datetime, **raw_attributes):
+    def __init__(self, interface, id: str, class_: Class, status: int, created: datetime, **raw_attributes):
         super().__init__(interface)
         self.id = id
         self.class_ = class_
+        self.status = status
         self.created = created
         self.raw_attributes = raw_attributes
         self.interface.register_control(self)
@@ -217,6 +223,22 @@ class Object(ObjectInterfaceControl):
         super().clear_cache()
         self.get_value.cache_clear()
         self.get_unprocessed_value.cache_clear()
+
+    def is_active(self):
+        """ Gibt zurück, ob das Objekt aktiv ist """
+        return self.status == STATUS_ACTIVE
+
+    def activate(self):
+        """ Aktiviert das Objekt """
+        self.interface.activate(self)
+
+    def deactivate(self):
+        """ Deaktiviert das Objekt """
+        self.interface.deactivate(self)
+
+    def delete(self):
+        """ Löscht das Objekt """
+        self.interface.delete(self)
 
     def modify(self, **attributes):
         """ Aktualisiert die übergebenen Attribute """
@@ -238,7 +260,7 @@ class Object(ObjectInterfaceControl):
     def dump(self):
         """ Gibt String mit allen Objekteigenschaften zurück """
         str_attributes = '\n  '.join(f'{attribute_name} = {self[attribute_name]}' for attribute_name in self.get_attribute_names())
-        return f'{self.class_.name} {self.id}:\n  {str_attributes}'
+        return f"{self.class_.name} {self.id} ({['In creation', 'Active', 'Inactive', 'Deleted'][self.status]}):\n  {str_attributes}"
     
     def update_raw_attributes(self, **raw_attributes):
         self.raw_attributes.update(raw_attributes)

@@ -4,8 +4,7 @@ from control import ObjectInterfaceControl, Datatype, Class, Attribute, Attribut
 from utils import get_data_table_name, get_reference_table_name, get_index_name, create_condition, print_table
 from programmability.handler import ExecutionHandler
 from functools import cached_property, cache
-
-VERSION = '0.1'
+from constant import *
 
 class ObjectInterface:
 
@@ -24,7 +23,7 @@ class ObjectInterface:
 
     def setup(self):
         with open('setup/init.sql', 'r') as file:
-            self.cursor.executescript(file.read())
+            self.cursor.executescript(file.read().format(STATUS_IN_CREATION=STATUS_IN_CREATION))
         self.log('Setup')
         self.commit()
         logging.debug('Setup successful')
@@ -209,19 +208,38 @@ class ObjectInterface:
     #endregion
     
     #region Object
+    def touch(self, class_: Class | int | str):
+        """Creates a new object with the given class and the status "In creation" and returns the object."""
+        class_ = self.parse_class(class_)
+        self.cursor.execute("INSERT INTO data_meta (class_id) VALUES (?) RETURNING id, status, created", (class_.id,))
+        meta = self.cursor.fetchone()
+        return Object(self, meta['id'], class_, meta['status'], meta['created'], **{a.name: None for a in class_.get_total_assigned_attributes()})
+
+    def __set_object_status__(self, object_: Object, status: int):
+        """Sets the status of the given object"""
+        self.cursor.execute('UPDATE data_meta SET status = ? WHERE id = ?', (status, object_.id))
+        object_.status = status
+
+    def activate(self, object_: Object):
+        """Activates the given object"""
+        self.__set_object_status__(object_, STATUS_ACTIVE)
+
+    def deactivate(self, object_: Object):
+        """Deactivates the given object"""
+        self.__set_object_status__(object_, STATUS_INACTIVE)
+
+    def delete(self, object_: Object):
+        """Deletes the given object"""
+        self.__set_object_status__(object_, STATUS_DELETED)
+
     def create_object(self, class_: Class | int | str, **attributes):
         """Inserts an object with the given class and attributes into the database"""
         class_ = self.parse_class(class_)
-
-        # Zuerst das Objekt in data_meta einfügen und ID erhalten
-        self.cursor.execute("INSERT INTO data_meta (class_id) VALUES (?) RETURNING id, created", (class_.id,))
-        meta = self.cursor.fetchone()
-
-        # Insert attributes
-        object = Object(self, meta['id'], class_, meta['created'], **attributes)
+        object_ = self.touch(class_)
         if len(attributes) > 0:
-            self.modify(object, **attributes)
-        return object
+            self.modify(object_, **attributes)
+        object_.activate()
+        return object_
     
     def modify(self, object_: Object, **attributes) -> Object:
         """Modifies the given objects with the given attributes"""
@@ -293,7 +311,7 @@ class ObjectInterface:
 
         # Get attributes
         self.cursor.execute(f"{self.__get_class_view_sql__(class_)} AND data_meta.id = ?", (id,))
-        return Object(self, id, class_, meta['created'], **dict(self.cursor.fetchone()))
+        return Object(self, id, class_, meta['status'], meta['created'], **dict(self.cursor.fetchone()))
     
     def bind(self, reference: Reference | int | str, origin: Object, targets: list, rebind: bool = False):
         """Binds two objects using the given reference"""
@@ -331,7 +349,7 @@ class ObjectInterface:
         # Apply new version
         self.cursor.execute("UPDATE structure_reference_version SET current_version = ? WHERE reference_id = ? AND origin_object_id = ?", (new_version, reference.id, origin.id))
 
-    def hop(self, reference: Reference | int | str, origin: Object, version: int = None) -> ObjectList:
+    def hop(self, reference: Reference | int | str, origin: Object, version: int = None, only_active_objects: bool = True) -> ObjectList:
         """Returns objects referenced to the origin objects by the give reference"""
         reference = self.parse_reference(reference)
 
@@ -346,7 +364,11 @@ class ObjectInterface:
         # Get referenced objects
         table_name = get_reference_table_name(reference.name)
         self.cursor.execute(f"SELECT target_id FROM {table_name} WHERE origin_id = ? AND version = ?", (origin.id, version))
-        return self.create_object_list([self.get_object(row['target_id']) for row in self.cursor.fetchall()])
+        objects = [self.get_object(row['target_id']) for row in self.cursor.fetchall()]
+        if only_active_objects:
+            return self.create_object_list([object_ for object_ in objects if object_.is_active()])
+        else:
+            return self.create_object_list(objects)
     #endregion
 
     def create_object_list(self, objects: list = []) -> ObjectList:
