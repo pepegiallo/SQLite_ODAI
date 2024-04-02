@@ -104,7 +104,7 @@
     birthday: date,
     example_text: cstring
 }
-Person {
+Person* {
     first_name,
     last_name,
     full_name {
@@ -114,13 +114,13 @@ Person {
     },
     birthday
 }
-Customer(Person) {
+Customer*(Person) {
     street,
     house_number,
     zip,
     city
 }
-Product {
+Product* {
     name,
     price
 }

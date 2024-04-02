@@ -32,6 +32,12 @@ def correct_source_indentation(source: str) -> str:
         return '\n'.join(line[line_start:].rstrip() for line in lines)
     else:
         return None
+    
+def parse_tagged_name(name: str, tag_character: str = '*'):
+    if tag_character in name:
+        return name.replace(tag_character, ''), True
+    else:
+        return name, False
 
 class Interpreter:
     def __init__(self, interface: ObjectInterface) -> None:
@@ -137,14 +143,14 @@ class Interpreter:
             
             # Mit Parent
             if bracket_open > 0 and bracket_close > 0 and bracket_open < bracket_close:
-                class_name = class_text[0: bracket_open]
+                class_name, traced = parse_tagged_name(class_text[0: bracket_open])
                 parent = self.interface.get_class(class_text[bracket_open + 1: bracket_close])
 
             # Ohne Parent
             else:
-                class_name = class_text
+                class_name, traced = parse_tagged_name(class_text)
                 parent = None
-            class_ = self.interface.create_class(class_name, parent)
+            class_ = self.interface.create_class(class_name, traced, parent)
 
             # Attribute und Referenzen
             start = 0

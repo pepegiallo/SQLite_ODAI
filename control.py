@@ -61,10 +61,11 @@ class Datatype(ObjectInterfaceControl):
 
 
 class Class(ObjectInterfaceControl):
-    def __init__(self, interface, id: int, name: str, parent_id: int) -> None:
+    def __init__(self, interface, id: int, name: str, traced: bool, parent_id: int) -> None:
         super().__init__(interface)
         self.id = id
         self.name = name
+        self.traced = traced
         self.parent_id = parent_id
         self.interface.register_control(self)
 
@@ -194,12 +195,14 @@ class Reference(ObjectInterfaceControl):
         return self.interface.get_class(self.target_class_id)
 
 class Object(ObjectInterfaceControl):
-    def __init__(self, interface, id: str, class_: Class, status: int, created: datetime, **raw_attributes):
+    def __init__(self, interface, id: str, class_: Class, status: int, created: datetime, version: int, current_version: int, **raw_attributes):
         super().__init__(interface)
         self.id = id
         self.class_ = class_
         self.status = status
         self.created = created
+        self.version = version
+        self.current_version = current_version
         self.raw_attributes = raw_attributes
         self.interface.register_control(self)
 
@@ -258,9 +261,15 @@ class Object(ObjectInterfaceControl):
     
     def update_raw_attributes(self, **raw_attributes):
         self.raw_attributes.update(raw_attributes)
-        for key in raw_attributes.keys():
-            self.get_value.cache_parameters().pop(key, None)
-            self.get_unprocessed_value.cache_parameters().pop(key, None)
+
+        # Would be more efficient but does not work with the cache decorator
+        #for key in raw_attributes.keys():
+        #    self.get_value.cache_parameters().pop(key, None)
+        #    self.get_unprocessed_value.cache_parameters().pop(key, None)
+        
+        # Workaround
+        self.get_value.cache_clear()
+        self.get_unprocessed_value.cache_clear()
     
     @cache
     def get_value(self, attribute_name: str):
@@ -286,6 +295,10 @@ class Object(ObjectInterfaceControl):
             return self.raw_attributes[attribute_name]
         else:
             raise KeyError(f'Invalid attribute {attribute_name}')
+        
+    def get_version_times(self) -> dict:
+        """ Gibt die Erstellungszeit der Versionen des Objektes als Dict zurück """
+        return self.interface.get_version_times(self) 
         
 class ObjectList(ObjectInterfaceControl):
     def __init__(self, interface, objects: list = []):

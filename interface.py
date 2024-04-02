@@ -1,7 +1,8 @@
 import sqlite3
 import logging
+from datetime import datetime
 from control import ObjectInterfaceControl, Datatype, Class, Attribute, AttributeAssignment, Reference, Object, ObjectList
-from utils import get_data_table_name, get_reference_table_name, get_index_name, create_condition, print_table
+from utils import get_data_table_name, get_reference_table_name, get_index_name, create_condition, print_table, parse_sqlite_datetime, int_to_bool, bool_to_int
 from programmability.handler import ExecutionHandler
 from functools import cached_property, cache
 from constant import *
@@ -52,7 +53,7 @@ class ObjectInterface:
         print_table(self.cursor.fetchall())
         
     def log(self, comment: str):
-        self.cursor.execute('INSERT INTO info (version, comment) VALUES (?, ?)', (VERSION, comment))
+        self.cursor.execute('INSERT INTO info (version, comment, time) VALUES (?, ?, ?)', (VERSION, comment, datetime.now()))
 
     def disconnect(self):
         self.connection.close()
@@ -118,15 +119,15 @@ class ObjectInterface:
     #endregion
 
     #region Class
-    def create_class(self, name: str, parent: Class = None):
+    def create_class(self, name: str, traced: bool = True, parent: Class = None):
         """Creates new class and returns Class object"""
-        self.cursor.execute(f"CREATE TABLE {get_data_table_name(name)} (id INTEGER, version INTEGER, created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(id, version))")
+        self.cursor.execute(f"CREATE TABLE {get_data_table_name(name)} (id INTEGER, version INTEGER, created DATETIME, PRIMARY KEY(id, version))")
         if parent:
-            self.cursor.execute("INSERT INTO structure_class (name, parent_id) VALUES (?, ?)", (name, parent.id))
+            self.cursor.execute("INSERT INTO structure_class (name, traced, parent_id) VALUES (?, ?, ?)", (name, bool_to_int(traced), parent.id))
         else:
-            self.cursor.execute("INSERT INTO structure_class (name) VALUES (?)", (name,))
-        logging.debug(f"Created new class {name}{f' as subclass of {parent.name}' if parent else ''}")
-        return Class(self, self.cursor.lastrowid, name, parent.id if parent else None)
+            self.cursor.execute("INSERT INTO structure_class (name, traced) VALUES (?, ?)", (name, bool_to_int(traced)))
+        logging.debug(f"Created new{' traced' if traced else ''} class {name}{f' as subclass of {parent.name}' if parent else ''}")
+        return Class(self, self.cursor.lastrowid, name, traced, parent.id if parent else None)
     
     @cache
     def get_class(self, key: int | str):
@@ -135,7 +136,7 @@ class ObjectInterface:
         self.cursor.execute(f"SELECT * FROM structure_class WHERE {condition}", parameters)
         res = self.cursor.fetchone()
         if res:
-            return Class(self, res['id'], res['name'], res['parent_id'])
+            return Class(self, res['id'], res['name'], int_to_bool(res['traced']), res['parent_id'])
         else:
             raise KeyError(f'Class {parameters[0]} not found')
     
@@ -211,9 +212,10 @@ class ObjectInterface:
     def touch(self, class_: Class | int | str):
         """Creates a new object with the given class and the status "In creation" and returns the object."""
         class_ = self.parse_class(class_)
-        self.cursor.execute("INSERT INTO data_meta (class_id) VALUES (?) RETURNING id, status, created", (class_.id,))
+        creation_time = datetime.now()
+        self.cursor.execute("INSERT INTO data_meta (class_id, created) VALUES (?, ?) RETURNING id, status, current_version", (class_.id, creation_time))
         meta = self.cursor.fetchone()
-        return Object(self, meta['id'], class_, meta['status'], meta['created'], **{a.name: None for a in class_.get_assigned_attributes(True)})
+        return Object(self, meta['id'], class_, meta['status'], creation_time, meta['current_version'], meta['current_version'], **{a.name: None for a in class_.get_assigned_attributes(True)})
 
     def __set_object_status__(self, object_: Object, status: int):
         """Sets the status of the given object"""
@@ -274,7 +276,11 @@ class ObjectInterface:
                 # Insert new version
                 str_cols = ', '.join(current_attributes.keys())
                 str_placeholder = ', '.join(['?'] * len(current_attributes.keys()))
-                self.cursor.execute(f"INSERT INTO {table_name} (id, version, {str_cols}) VALUES (?, ?, {str_placeholder})", (object_.id, new_version, *current_attributes.values()))
+                self.cursor.execute(f"INSERT INTO {table_name} (id, version, created, {str_cols}) VALUES (?, ?, ?, {str_placeholder})", (object_.id, new_version, datetime.now(), *current_attributes.values()))
+
+                # Delete previous version if class is not traced
+                if not object_.get_class().traced and current_version > 0:
+                    self.cursor.execute(f"DELETE FROM {table_name} WHERE id = ? AND version <= ?", (object_.id, current_version))
 
             # No changes => Just update version
             else:
@@ -283,8 +289,24 @@ class ObjectInterface:
         # Set new version to the current version
         self.cursor.execute('UPDATE data_meta SET current_version = ? WHERE id = ?', (new_version, object_.id))
         object_.update_raw_attributes(**raw_attributes)
+        object_.current_version = new_version
+        object_.version = new_version
         return object_
     
+    def get_version_times(self, object_: Object) -> dict:
+        """ Returns the creation times of an objects versions as a dict """
+        version_times = {}
+        for current_class in object_.get_class().get_family_tree():
+            table_name = get_data_table_name(current_class.name)
+            self.cursor.execute(f"SELECT version, created FROM {table_name} WHERE id = ?", (object_.id,))
+            for row in self.cursor.fetchall():
+                version, time = row['version'], parse_sqlite_datetime(row['created'])
+                if version in version_times.keys():
+                    version_times[version].append(time)
+                else:
+                    version_times[version] = [time]
+        return {k: min(v) for k, v in version_times.items()}
+
     def __get_class_view_sql__(self, class_: Class):
         strs_joins = []
         strs_cols = []
@@ -311,7 +333,7 @@ class ObjectInterface:
 
         # Get attributes
         self.cursor.execute(f"{self.__get_class_view_sql__(class_)} AND data_meta.id = ?", (id,))
-        return Object(self, id, class_, meta['status'], meta['created'], **dict(self.cursor.fetchone()))
+        return Object(self, id, class_, meta['status'], parse_sqlite_datetime(meta['created']), meta['current_version'], meta['current_version'], **dict(self.cursor.fetchone()))
     
     def bind(self, reference: Reference | int | str, origin: Object, targets: list, rebind: bool = False):
         """Binds two objects using the given reference"""
@@ -345,6 +367,11 @@ class ObjectInterface:
         # Insert targets
         if len(targets) > 0:
             self.cursor.executemany(f"INSERT INTO {table_name} (origin_id, target_id, version) VALUES (?, ?, ?)", ((origin.id, target.id, new_version) for target in targets))
+
+        # Delete previous version if origin class is not traced
+        origin_class = reference.get_origin_class()
+        if not origin_class.traced and current_version > 0:
+            self.cursor.execute(f"DELETE FROM {table_name} WHERE origin_id = ? AND version <= ?", (origin_class.id, current_version))
         
         # Apply new version
         self.cursor.execute("UPDATE structure_reference_version SET current_version = ? WHERE reference_id = ? AND origin_object_id = ?", (new_version, reference.id, origin.id))

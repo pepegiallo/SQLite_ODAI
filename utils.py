@@ -68,7 +68,10 @@ def date_to_string(d: date) -> str:
     return d.strftime(r'%Y-%m-%d')
 
 def parse_sqlite_datetime(str_datetime: str) -> datetime:
-    return datetime.strptime(str_datetime, r'%Y-%m-%d %H:%M:%S')
+    if '.' in str_datetime:
+        return datetime.strptime(str_datetime, r'%Y-%m-%d %H:%M:%S.%f')
+    else:
+        return datetime.strptime(str_datetime, r'%Y-%m-%d %H:%M:%S')
 
 def datetime_to_string(dt: datetime) -> str:
     return dt.strftime(r'%Y-%m-%d %H:%M:%S')
@@ -87,3 +90,15 @@ def array_to_bytes(array: np.array) -> bytes:
 def bytes_to_array(bytes_: bytes) -> np.array:
     buffer = BytesIO(bytes_)
     return np.load(buffer, allow_pickle=True)
+
+def bool_to_int(value: bool) -> int:
+    if value:
+        return 1
+    else:
+        return 0
+    
+def int_to_bool(value: int) -> bool:
+    if value:
+        return True
+    else:
+        return False

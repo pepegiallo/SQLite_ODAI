@@ -3,7 +3,7 @@ CREATE TABLE info (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     "version" VARCHAR(8) NOT NULL,
     comment TEXT,
-    "time" DATETIME DEFAULT CURRENT_TIMESTAMP
+    "time" DATETIME
 );
 
 -- Datentyp
@@ -21,6 +21,7 @@ CREATE INDEX datatype_name ON structure_datatype(name);
 CREATE TABLE structure_class (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    traced TINYINT NOT NULL,
     parent_id INTEGER REFERENCES structure_class(id)
 );
 CREATE INDEX class_name ON structure_class(name);
@@ -66,6 +67,6 @@ CREATE TABLE data_meta (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     class_id INTEGER REFERENCES structure_class(id),
     status INTEGER REFERENCES utils_status(id) DEFAULT {STATUS_IN_CREATION},
-    created DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created DATETIME,
     current_version INTEGER DEFAULT 0
 );
