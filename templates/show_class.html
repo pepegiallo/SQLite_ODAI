@@ -2,40 +2,88 @@
 
 {% block content %}
     <h1>{% block title %} Class {{ class_.name }} {% endblock %}</h1>
+
+    <!-- General information -->
+    <hr>
     <h2>General</h2>
-    <table>
-        <tr><td>ID</td><td>{{ class_.id }}</td></tr>
-        <tr><td>Name</td><td>{{ class_.name }}</td></tr>
-        <tr><td>Parent</td><td>{{ class_.get_parent().name }}</td></tr>
-    </table>
-    <h2>Attributes</h2>
-    <table>
-        {% for attribute in class_attributes %}
-            <tr><td style="font-weight: bold;"><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
-        {% endfor %}
-        {% for attribute in inherited_attributes %}
-            <tr><td>{{ attribute.name }}</td></tr>
-        {% endfor %}
-    </table>
+    <div class="row">
+        <div class="col-2">
+            <label for="identifier" class="form-label">Identifier</label>
+            <input type="text" class="form-control" id="identifier" value="{{ class_.id }}" disabled>
+        </div>
+        <div class="col-5">
+            <label for="class_name" class="form-label">Name</label>
+            <input type="text" class="form-control" id="class_name" value="{{ class_.name }}" disabled>
+        </div>
+        <div class="col-5">
+            <label for="parent_name" class="form-label">Parent</label>
+            <input type="text" class="form-control" id="parent_name" value="{{ class_.get_parent().name }}" disabled>
+        </div>
+    </div>
+
+    <hr>
+    <div class="row">
+        <!-- List assigned attributes -->
+        <div class="col-6">
+            <h2>Attributes</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attribute in class_attributes %}
+                        <tr><td style="font-weight: bold"><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
+                    {% endfor %}
+                    {% for attribute in inherited_attributes %}
+                        <tr><td><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- List origin references -->
+        <div class="col-6">
+            <h2>References</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Target</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reference in class_references %}
+                        <tr><td style="font-weight: bold"><a href="#">{{ reference.name }}</a></td><td><a href="{{ url_for('show_class', class_id=reference.get_target_class().id) }}">{{ reference.get_target_class().name }}</a></td></tr>
+                    {% endfor %}
+                    {% for reference in inherited_references %}
+                        <tr><td><a href="#">{{ reference.name }}</a></td><td><a href="{{ url_for('show_class', class_id=reference.get_target_class().id) }}">{{ reference.get_target_class().name }}</a></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- List instances recursive -->
+    <hr>
     <h2>Objects</h2>
-    <table>
+    <table class="table">
         <thead>
             <tr>
-                <th>ID</th>
+                <th>Identifier</th>
                 <th>Class</th>
-                {% for att_name in attributes %}
-                    <th>{{ att_name }}</th>
-                {% endfor %}
+                <th>Status</th>
+                <th>Created</th>
             </tr>
         </thead>
         <tbody>
         {% for obj in objects %}
             <tr>
-                <td>{{ obj.id }}</td>
+                <td><a href="{{ url_for('show_object', object_id=obj.id) }}">{{ obj.id }}</a></td>
                 <td>{{ obj.get_class().name }}</td>
-                {% for attribute_name in displayed_attribute_names %}
-                    <td>{{ obj.attributes[attribute_name] }}</td>
-                {% endfor %}
+                <td>{{ obj.status }}</td>
+                <td>{{ obj.created }}</td>
             </tr>
         {% endfor %}
         </tbody>

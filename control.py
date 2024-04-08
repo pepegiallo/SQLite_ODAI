@@ -120,6 +120,16 @@ class Class(ObjectInterfaceControl):
         """ Gibt die der Klasse direkt zugewiesenen Attribute zurück """
         return [assignment.get_attribute() for assignment in self.get_attribute_assignments(recursive)]
 
+    def get_references(self, by_target_class: bool = False, recursive: bool = False):
+        """ Gibt die Referenzen der Klasse zurück. Die Klasse kann die Ursprungs- oder Zielklasse sein. """
+        if recursive:
+            references = []
+            for class_ in self.get_family_tree():
+                references.extend(class_.get_references(by_target_class))
+            return references
+        else:
+            return self.interface.get_references(self, by_target_class)
+
     def is_root(self):
         """ Gibt zurück, ob die Klasse eine Ursprungsklasse ist (keine Vorfahren hat) """
         return self.parent_id is None

@@ -6,6 +6,14 @@ from io import BytesIO
 from functools import wraps
 from time import time
 
+def display_datetime(dt: datetime | str):
+    if isinstance(dt, str):
+        if '.' in dt:
+            dt = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S.%f')
+        else:
+            dt = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+
 def get_data_table_name(class_name: str) -> str:
     return f"data_{class_name}"
 

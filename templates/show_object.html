@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %} Object {{ object_.id }} {% endblock %}</h1>
+
+    <!-- General information -->
+    <h2>General</h2>
+    <table>
+        <tr><td>Identifier</td><td>{{ object_.id }}</td></tr>
+        <tr><td>Class</td><td>{{ object_.get_class().name }}</td></tr>
+        <tr><td>Status</td><td>{{ object_.status }}</td></tr>
+        <tr><td>Created</td><td>{{ object_.created }}</td></tr>
+        <tr><td>Version</td><td>{{ object_.version }}</td></tr>
+    </table>
+
+    <!-- List attribute values -->
+    <h2>Attributes</h2>
+    <table class="table">
+        {% for att_name in object_.get_attribute_names() %}
+            <tr><td>{{ att_name }}</td><td>{{ object_.get_value(att_name) }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <!-- List references -->
+    <h2>References</h2>
+    {% for reference in object_.get_class().get_references(recursive=True) %}
+        <h3>{{ reference.name }}</h3>
+        <table class="table group-table">
+            <thead>
+                <tr>
+                    <th>Identifier</th>
+                    <th>Class</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ref_obj in object_.hop(reference.name) %}
+                    <tr>
+                        <td><a href="{{ url_for('show_object', object_id=ref_obj.id) }}">{{ ref_obj.id }}</a></td>
+                        <td>{{ ref_obj.get_class().name }}</td>
+                        <td>{{ ref_obj.status }}</td>
+                        <td>{{ ref_obj.created }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endfor %}
+
+    <!-- Gleiche Spaltenbreite bei Tabellengruppen -->
+    <script>
+        window.onload = function() {
+            fitTableGroup('group-table');
+        };
+    </script>
+{% endblock %}

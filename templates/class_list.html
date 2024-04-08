@@ -2,13 +2,20 @@
 
 {% block content %}
     <h1>{% block title %} Classes {% endblock %}</h1>
-    <table>
+    <table class="table">
         <thead>
-            <tr><th>ID</th><th>Name</th><th>Parent</th></tr>
+            <tr>
+                <th>Identifier</th>
+                <th>Name</th>
+                <th>Parent</th>
+            </tr>
         </thead>
         <tbody>
         {% for class_ in classes %}
-            <tr><td><a href="{{ url_for('show_class', class_id=class_.id) }}">{{ class_['id'] }}</a></td><td>{{ class_.name }}</td><td>{{ class_.get_parent().name }}</td></tr>
+            <tr>
+                <td><a href="{{ url_for('show_class', class_id=class_.id) }}">{{ class_['id'] }}</a></td>
+                <td>{{ class_.name }}</td><td>{{ class_.get_parent().name }}</td>
+            </tr>
         {% endfor %}
         </tbody>
     </table>

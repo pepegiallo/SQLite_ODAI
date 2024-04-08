@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %} Database log {% endblock %}</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Identifier</th>
+                <th>Version</th>
+                <th>Comment</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+            <tr>
+                <td>{{ row['id'] }}</td>
+                <td>{{ row['version'] }}</td>
+                <td>{{ row['comment'] }}</td>
+                <td>{{ display_datetime(row['time']) }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
