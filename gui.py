@@ -3,7 +3,9 @@ from flask import Flask, render_template, request, redirect, url_for, abort
 import utils
 
 FILENAME_DATABASE = 'data/database.db'
-app = Flask(__name__)
+app = Flask(__name__,
+            static_folder='gui/static',
+            template_folder='gui/templates')
 
 def get_interface() -> ObjectInterface:
     interface = ObjectInterface(FILENAME_DATABASE)
