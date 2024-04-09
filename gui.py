@@ -23,13 +23,20 @@ def class_list():
         interface.cursor.execute("SELECT id FROM structure_class ORDER BY id")
         return render_template('class_list.html', classes=[interface.get_class(row['id']) for row in interface.cursor.fetchall()])
 
+@app.route('/datatype/<int:datatype_id>')
+def show_datatype(datatype_id: int):
+    with get_interface() as interface:
+
+        # Klasse ermitteln
+        datatype = interface.get_datatype(datatype_id)
+        return render_template('show_datatype.html', datatype=datatype)
+
 @app.route('/class/<int:class_id>')
 def show_class(class_id: int):
     with get_interface() as interface:
 
-        # Klasse und alle Children ermitteln
+        # Klasse ermitteln
         class_ = interface.get_class(class_id)
-        valid_classes = [class_, *class_.get_children(True)]
 
         # Attribute ermitteln
         all_attributes = [aa.get_attribute() for aa in class_.get_attribute_assignments(True)]

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>{% block title %} Datatype {{ datatype.name }} {% endblock %}</h1>
+
+    <!-- General information -->
+    <hr>
+    <h2>General</h2>
+    <div class="row mb-2">
+        <div class="col-2">
+            <label for="identifier" class="form-label">Identifier</label>
+            <input type="text" class="form-control" id="identifier" value="{{ datatype.id }}" disabled>
+        </div>
+        <div class="col-5">
+            <label for="datatype_name" class="form-label">Name</label>
+            <input type="text" class="form-control" id="datatype_name" value="{{ datatype.name }}" disabled>
+        </div>
+        <div class="col-5">
+            <label for="parent_name" class="form-label">Parent</label>
+            <input type="text" class="form-control" id="parent_name" value="{{ datatype.get_parent().name }}" disabled>
+        </div>
+        <!--<div class="col-1">
+            <a href="{{ url_for('show_datatype', datatype_id=datatype.get_parent().id) }}"><button class="btn btn-primary">Show</button></a>
+        </div>-->
+    </div>
+    <div class="row mb-2">
+        <div class="col-12">
+            <label for="generator" class="form-label">Generator</label>
+            <input type="text" class="form-control" id="generator" value="{{ datatype.get_generator() }}" disabled>
+        </div>
+    </div>
+
+    <!-- Transformer -->
+    <hr>
+    <h2>Transformer</h2>
+    <div class="row">
+        <div class="col-12 mb-2">
+            <label for="read_transformer" class="form-label">Read</label>
+            <textarea class="form-control" id="read_transformer" rows="10" disabled>{{ datatype.read_transformer_source }}</textarea>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12 mb-2">
+            <label for="write_transformer" class="form-label">Write</label>
+            <textarea class="form-control" id="write_transformer" rows="10" disabled>{{ datatype.write_transformer_source }}</textarea>
+        </div>
+    </div>
+{% endblock %}

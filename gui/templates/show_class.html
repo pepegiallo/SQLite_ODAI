@@ -30,14 +30,21 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Datatype</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for attribute in class_attributes %}
-                        <tr><td style="font-weight: bold"><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
+                        <tr>
+                            <td style="font-weight: bold"><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td>
+                            <td><a href="{{ url_for('show_datatype', datatype_id=attribute.get_datatype().id) }}">{{ attribute.get_datatype().name }}</a></td>
+                        </tr>
                     {% endfor %}
                     {% for attribute in inherited_attributes %}
-                        <tr><td><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td></tr>
+                        <tr>
+                            <td><a href="{{ url_for('show_attribute_assignment', class_id=class_.id, attribute_id=attribute.id) }}">{{ attribute.name }}</a></td>
+                            <td><a href="{{ url_for('show_datatype', datatype_id=attribute.get_datatype().id) }}">{{ attribute.get_datatype().name }}</a></td>
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
